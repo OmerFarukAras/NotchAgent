@@ -1,0 +1,23 @@
+# Xcode
+DerivedData/
+build/
+.derivedData/
+dist/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+*.xccheckout
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# macOS
+.DS_Store
+
+# Local project notes and scratch files
+docs/PROJECT_PLAN.md
+test_calendar.swift
+test_ek.swift
+
+# Swift Package Manager / temporary output
+.build/
+Package.resolved
