@@ -8,11 +8,14 @@
 	<true/>
 	<key>com.apple.security.device.camera</key>
 	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<key>com.apple.security.temporary-exception.apple-events</key>
 	<array>
 		<string>com.spotify.client</string>
+		<string>com.apple.Music</string>
 		<string>com.apple.systemevents</string>
 	</array>
 	<key>com.apple.security.personal-information.calendars</key>

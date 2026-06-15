@@ -253,43 +253,61 @@ final class NotchViewModel {
         appState.agentStatusMessage = "Ready for a quick command"
     }
 
+    private var selectedMusicProvider: AppState.MusicProvider {
+        AppState.MusicProvider(rawValue: appState.selectedMusicProvider) ?? .spotify
+    }
+
+    func selectMusicProvider(_ providerName: String) {
+        let provider = AppState.MusicProvider(rawValue: providerName) ?? .spotify
+        appState.spotifyTrackTitle = "No track"
+        appState.spotifyArtistName = provider.rawValue
+        appState.spotifyIsPlaying = false
+        appState.spotifyProgress = 0
+        appState.spotifyStatusMessage = "\(provider.rawValue) selected"
+        appState.spotifyIsShuffling = false
+        appState.spotifyIsRepeating = false
+        updateSpotifyArtwork(from: "")
+        refreshSpotifyState()
+    }
+
     func openSpotify() {
-        appState.spotifyStatusMessage = "Opening Spotify"
-        guard let spotifyURL = NSWorkspace.shared.urlForApplication(
-            withBundleIdentifier: "com.spotify.client"
+        let provider = selectedMusicProvider
+        appState.spotifyStatusMessage = "Opening \(provider.rawValue)"
+        guard let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: provider.bundleIdentifier
         ) else {
-            appState.spotifyStatusMessage = "Spotify not found"
+            appState.spotifyStatusMessage = "\(provider.rawValue) not found"
             appState.notchState = .error
-            appState.agentStatusMessage = "Spotify app could not be opened"
+            appState.agentStatusMessage = "\(provider.rawValue) app could not be opened"
             return
         }
 
         NSWorkspace.shared.openApplication(
-            at: spotifyURL,
+            at: appURL,
             configuration: NSWorkspace.OpenConfiguration()
         ) { [weak self] _, error in
             Task { @MainActor [weak self] in
                 if error == nil {
-                    self?.appState.spotifyStatusMessage = "Spotify opened"
+                    self?.appState.spotifyStatusMessage = "\(provider.rawValue) opened"
                     self?.appState.notchState = .result
                     self?.refreshSpotifyState()
                 } else {
-                    self?.appState.spotifyStatusMessage = "Spotify could not open"
+                    self?.appState.spotifyStatusMessage = "\(provider.rawValue) could not open"
                     self?.appState.notchState = .error
-                    self?.appState.agentStatusMessage = "Spotify app could not be opened"
+                    self?.appState.agentStatusMessage = "\(provider.rawValue) app could not be opened"
                 }
             }
         }
     }
 
     func toggleSpotifyPlayback() {
-        runSpotifyCommand("playpause")
+        runMusicCommand("playpause")
         refreshSpotifyState(after: .milliseconds(250))
         appState.notchState = .result
     }
 
     func skipSpotifyForward() {
-        runSpotifyCommand("next track")
+        runMusicCommand("next track")
         refreshSpotifyState(after: .milliseconds(450))
         if appState.spotifyStatusMessage == "Ready" {
             appState.spotifyStatusMessage = "Skipped forward"
@@ -298,7 +316,7 @@ final class NotchViewModel {
     }
 
     func skipSpotifyBackward() {
-        runSpotifyCommand("previous track")
+        runMusicCommand("previous track")
         refreshSpotifyState(after: .milliseconds(450))
         if appState.spotifyStatusMessage == "Ready" {
             appState.spotifyStatusMessage = "Skipped back"
@@ -307,53 +325,22 @@ final class NotchViewModel {
     }
 
     func refreshSpotifyState() {
-        let source = """
-        tell application "System Events"
-            set isSpotifyRunning to exists process "Spotify"
-        end tell
-
-        if isSpotifyRunning is false then
-            return "not-running"
-        end if
-
-        tell application "Spotify"
-            set trackName to "No track"
-            set artistName to "Spotify"
-            set playbackState to player state as text
-            set currentPosition to player position
-            set trackDuration to 0
-            set artworkURL to ""
-            set currentVolume to 50
-            set isShuffling to false
-            set isRepeating to false
-
-            try
-                set trackName to name of current track
-                set artistName to artist of current track
-                set trackDuration to duration of current track
-                set artworkURL to artwork url of current track
-                set currentVolume to sound volume
-                set isShuffling to shuffling
-                set isRepeating to repeating
-            end try
-
-            return trackName & linefeed & artistName & linefeed & playbackState & linefeed & (currentPosition as text) & linefeed & (trackDuration as text) & linefeed & artworkURL & linefeed & (currentVolume as text) & linefeed & (isShuffling as text) & linefeed & (isRepeating as text)
-        end tell
-        """
+        let provider = selectedMusicProvider
+        let source = musicStateScript(for: provider)
 
         var error: NSDictionary?
         guard let result = NSAppleScript(source: source)?.executeAndReturnError(&error),
               error == nil,
               let value = result.stringValue
         else {
-            appState.spotifyStatusMessage = "Spotify automation needs permission"
+            appState.spotifyStatusMessage = "\(provider.rawValue) automation needs permission"
             appState.notchState = .error
-            appState.agentStatusMessage = "Allow Automation access for Spotify controls"
+            appState.agentStatusMessage = "Allow Automation access for \(provider.rawValue) controls"
             return
         }
 
         guard value != "not-running" else {
-            appState.spotifyStatusMessage = "Spotify is closed"
+            appState.spotifyStatusMessage = "\(provider.rawValue) is closed"
             appState.spotifyIsPlaying = false
             appState.spotifyProgress = 0
             appState.spotifyArtworkURL = ""
@@ -369,7 +356,7 @@ final class NotchViewModel {
         appState.spotifyIsPlaying = parts[2] == "playing"
 
         let currentPosition = Double(parts[3]) ?? 0
-        let durationSeconds = (Double(parts[4]) ?? 0) / 1000
+        let durationSeconds = Double(parts[4]) ?? 0
         appState.spotifyProgress = durationSeconds > 0
             ? min(max(currentPosition / durationSeconds, 0), 1)
             : 0
@@ -385,6 +372,79 @@ final class NotchViewModel {
         if parts.count >= 9 {
             appState.spotifyIsShuffling = parts[7] == "true"
             appState.spotifyIsRepeating = parts[8] == "true"
+        }
+    }
+
+    private func musicStateScript(for provider: AppState.MusicProvider) -> String {
+        switch provider {
+        case .spotify:
+            return """
+            tell application "System Events"
+                set isSpotifyRunning to exists process "\(provider.processName)"
+            end tell
+
+            if isSpotifyRunning is false then
+                return "not-running"
+            end if
+
+            tell application "\(provider.scriptName)"
+                set trackName to "No track"
+                set artistName to "\(provider.rawValue)"
+                set playbackState to player state as text
+                set currentPosition to player position
+                set trackDurationSeconds to 0
+                set artworkURL to ""
+                set currentVolume to 50
+                set isShuffling to false
+                set isRepeating to false
+
+                try
+                    set trackName to name of current track
+                    set artistName to artist of current track
+                    set trackDurationSeconds to (duration of current track) / 1000
+                    set artworkURL to artwork url of current track
+                    set currentVolume to sound volume
+                    set isShuffling to shuffling
+                    set isRepeating to repeating
+                end try
+
+                return trackName & linefeed & artistName & linefeed & playbackState & linefeed & (currentPosition as text) & linefeed & (trackDurationSeconds as text) & linefeed & artworkURL & linefeed & (currentVolume as text) & linefeed & (isShuffling as text) & linefeed & (isRepeating as text)
+            end tell
+            """
+        case .appleMusic:
+            return """
+            tell application "System Events"
+                set isMusicRunning to exists process "\(provider.processName)"
+            end tell
+
+            if isMusicRunning is false then
+                return "not-running"
+            end if
+
+            tell application "\(provider.scriptName)"
+                set trackName to "No track"
+                set artistName to "\(provider.rawValue)"
+                set playbackState to player state as text
+                set currentPosition to player position
+                set trackDurationSeconds to 0
+                set artworkURL to ""
+                set currentVolume to 50
+                set isShuffling to false
+                set isRepeating to false
+
+                try
+                    set trackName to name of current track
+                    set artistName to artist of current track
+                    set trackDurationSeconds to duration of current track
+                    set currentVolume to sound volume
+                    set isShuffling to shuffle enabled
+                    set repeatMode to song repeat as text
+                    set isRepeating to (repeatMode is not equal to "off")
+                end try
+
+                return trackName & linefeed & artistName & linefeed & playbackState & linefeed & (currentPosition as text) & linefeed & (trackDurationSeconds as text) & linefeed & artworkURL & linefeed & (currentVolume as text) & linefeed & (isShuffling as text) & linefeed & (isRepeating as text)
+            end tell
+            """
         }
     }
 
@@ -434,9 +494,10 @@ final class NotchViewModel {
         }
     }
 
-    private func runSpotifyCommand(_ command: String) {
+    private func runMusicCommand(_ command: String) {
+        let provider = selectedMusicProvider
         let source = """
-        tell application "Spotify"
+        tell application "\(provider.scriptName)"
             \(command)
         end tell
         """
@@ -445,25 +506,41 @@ final class NotchViewModel {
         NSAppleScript(source: source)?.executeAndReturnError(&error)
 
         if error != nil {
-            appState.spotifyStatusMessage = "Spotify automation needs permission"
+            appState.spotifyStatusMessage = "\(provider.rawValue) automation needs permission"
             appState.notchState = .error
-            appState.agentStatusMessage = "Allow Automation access for Spotify controls"
+            appState.agentStatusMessage = "Allow Automation access for \(provider.rawValue) controls"
         }
     }
 
     func setSpotifyVolume(to value: Double) {
         let intVol = Int(value * 100)
-        runSpotifyCommand("set sound volume to \(intVol)")
+        runMusicCommand("set sound volume to \(intVol)")
         appState.spotifyVolume = value
     }
 
     func toggleSpotifyShuffle() {
-        runSpotifyCommand("set shuffling to not shuffling")
+        switch selectedMusicProvider {
+        case .spotify:
+            runMusicCommand("set shuffling to not shuffling")
+        case .appleMusic:
+            runMusicCommand("set shuffle enabled to (not shuffle enabled)")
+        }
         refreshSpotifyState(after: .milliseconds(500))
     }
 
     func toggleSpotifyRepeat() {
-        runSpotifyCommand("set repeating to not repeating")
+        switch selectedMusicProvider {
+        case .spotify:
+            runMusicCommand("set repeating to not repeating")
+        case .appleMusic:
+            runMusicCommand("""
+            if song repeat is off then
+                set song repeat to all
+            else
+                set song repeat to off
+            end if
+            """)
+        }
         refreshSpotifyState(after: .milliseconds(500))
     }
     

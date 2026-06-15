@@ -45,6 +45,10 @@ struct SettingsView: View {
         .frame(width: 600, height: 460)
     }
 
+    private var selectedMusicProvider: AppState.MusicProvider {
+        AppState.MusicProvider(rawValue: appState.selectedMusicProvider) ?? .spotify
+    }
+
     @ViewBuilder
     private func selectedContent(for section: SettingsSection) -> some View {
         @Bindable var appState = appState
@@ -64,7 +68,7 @@ struct SettingsView: View {
                     Text("Command + Space").tag("Command + Space")
                     Text("Control + Space").tag("Control + Space")
                 }
-                LabeledContent("Shortcut", value: appState.shortcutStatusMessage)
+                LabeledContent("Shortcut action", value: appState.shortcutStatusMessage)
 
                 Divider()
 
@@ -97,8 +101,17 @@ struct SettingsView: View {
             }
         case .widgets:
             settingsGroup {
-                Toggle("Spotify / Media", isOn: $appState.showSpotifyStatus)
+                Toggle("Music", isOn: $appState.showSpotifyStatus)
                 if appState.showSpotifyStatus {
+                    Picker("Music provider", selection: $appState.selectedMusicProvider) {
+                        ForEach(AppState.MusicProvider.allCases) { provider in
+                            Text(provider.rawValue).tag(provider.rawValue)
+                        }
+                    }
+                    .onChange(of: appState.selectedMusicProvider) { _, newValue in
+                        coordinator.notchViewModel.selectMusicProvider(newValue)
+                    }
+
                     Picker("Compact icon style", selection: $appState.compactMediaIconStyle) {
                         ForEach(AppState.CompactMediaIconStyle.allCases) { style in
                             Text(style.rawValue).tag(style.rawValue)
@@ -156,18 +169,18 @@ struct SettingsView: View {
 
                 Divider()
 
-                LabeledContent("Spotify surface", value: appState.showSpotifyStatus ? appState.spotifyStatusMessage : "Hidden")
+                LabeledContent("\(selectedMusicProvider.rawValue) surface", value: appState.showSpotifyStatus ? appState.spotifyStatusMessage : "Hidden")
                 LabeledContent("Mirror surface", value: appState.showMirrorWidget ? "Enabled" : "Hidden")
                 LabeledContent("Calendar surface", value: appState.showCalendarWidget ? "Enabled" : "Hidden")
                 LabeledContent("Weather surface", value: appState.showWeatherWidget ? "Enabled" : "Hidden")
 
                 HStack(spacing: 10) {
-                    Button("Refresh Spotify") {
+                    Button("Refresh \(selectedMusicProvider.rawValue)") {
                         coordinator.notchViewModel.refreshSpotifyState()
                     }
                     .disabled(!appState.showSpotifyStatus)
 
-                    Button("Open Spotify") {
+                    Button("Open \(selectedMusicProvider.rawValue)") {
                         coordinator.notchViewModel.toggleSurface(.spotify)
                     }
                     .disabled(!appState.showSpotifyStatus)
@@ -203,9 +216,9 @@ struct SettingsView: View {
             }
         case .privacy:
             settingsGroup {
-                LabeledContent("Microphone", value: "Used by future voice input")
+                LabeledContent("Microphone", value: appState.notchState == .listening ? "Listening" : "Used by agent listening")
                 LabeledContent("Camera", value: appState.showMirrorWidget ? "Mirror enabled" : "Mirror hidden")
-                LabeledContent("Automation", value: "Required for Spotify controls")
+                LabeledContent("Automation", value: "Required for music controls")
             }
         }
     }

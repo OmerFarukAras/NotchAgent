@@ -2,7 +2,7 @@
 
 NotchAgent is a local-first macOS notch companion that turns the top-center screen area into a compact control surface.
 
-The project is currently an early SwiftUI prototype. The shell, notch window, widget surfaces, settings, Spotify controls, calendar preview, weather placeholder, and camera mirror surface are in progress. AI routing and model-backed commands are planned next.
+The project is currently an early SwiftUI prototype. The shell, notch window, widget surfaces, settings, Spotify and Apple Music controls, calendar preview, weather placeholder, and camera mirror surface are in progress. AI routing and model-backed commands are planned next.
 
 ## Current Features
 
@@ -10,7 +10,7 @@ The project is currently an early SwiftUI prototype. The shell, notch window, wi
 - Menu bar app with settings access
 - Local settings stored with `UserDefaults`
 - Global shortcut toggle for notch visibility
-- Spotify surface with AppleScript playback controls
+- Music surface with selectable Spotify or Apple Music AppleScript playback controls
 - Camera mirror surface with `AVCaptureSession`
 - Calendar surface using EventKit permissions
 - Weather surface placeholder
@@ -23,7 +23,7 @@ The project is currently an early SwiftUI prototype. The shell, notch window, wi
 - Rule matcher and app/plugin command routing
 - Local AI model fallback, likely through Ollama
 - Learned command aliases
-- GitHub, Cursor, Mail, and richer Spotify integrations
+- GitHub, Cursor, Mail, and richer music integrations
 - Voice input as an optional command input method
 
 ## Requirements
@@ -36,7 +36,7 @@ Some features require macOS permissions:
 
 - Camera access for the mirror surface
 - Calendar access for upcoming events
-- Automation access for Spotify controls
+- Automation access for Spotify and Apple Music controls
 
 ## Development
 

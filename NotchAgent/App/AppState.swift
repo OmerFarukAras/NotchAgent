@@ -23,6 +23,40 @@ final class AppState {
 
     // MARK: - Enums
     
+    enum MusicProvider: String, CaseIterable, Identifiable {
+        case spotify = "Spotify"
+        case appleMusic = "Apple Music"
+
+        var id: String { rawValue }
+
+        var bundleIdentifier: String {
+            switch self {
+            case .spotify:
+                return "com.spotify.client"
+            case .appleMusic:
+                return "com.apple.Music"
+            }
+        }
+
+        var processName: String {
+            switch self {
+            case .spotify:
+                return "Spotify"
+            case .appleMusic:
+                return "Music"
+            }
+        }
+
+        var scriptName: String {
+            switch self {
+            case .spotify:
+                return "Spotify"
+            case .appleMusic:
+                return "Music"
+            }
+        }
+    }
+
     enum CompactMediaIconStyle: String, CaseIterable, Identifiable {
         case equalizer = "Live Equalizer"
         case albumArt = "Album Art"
@@ -49,7 +83,11 @@ final class AppState {
         didSet { UserDefaults.standard.set(showWeatherWidget, forKey: "showWeatherWidget") }
     }
 
-    // MARK: - Spotify
+    // MARK: - Music
+
+    var selectedMusicProvider: String = UserDefaults.standard.string(forKey: "selectedMusicProvider") ?? MusicProvider.spotify.rawValue {
+        didSet { UserDefaults.standard.set(selectedMusicProvider, forKey: "selectedMusicProvider") }
+    }
 
     var spotifyTrackTitle = "Midnight City"
     var spotifyArtistName = "M83"
@@ -62,13 +100,14 @@ final class AppState {
     var spotifyIsShuffling = false
     var spotifyIsRepeating = false
     
-    var compactMediaIconStyle: String = UserDefaults.standard.string(forKey: "compactMediaIconStyle") ?? CompactMediaIconStyle.equalizer.rawValue {
+    var compactMediaIconStyle: String = UserDefaults.standard.string(forKey: "compactMediaIconStyle") ?? CompactMediaIconStyle.albumArt.rawValue {
         didSet { UserDefaults.standard.set(compactMediaIconStyle, forKey: "compactMediaIconStyle") }
     }
 
     // MARK: - Agent
 
     var agentStatusMessage = "Ready for a quick command"
+    var agentInputLevel: Double = 0
 
     // MARK: - Settings
 

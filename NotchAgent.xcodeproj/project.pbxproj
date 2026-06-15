@@ -251,21 +251,22 @@
 				CODE_SIGN_ENTITLEMENTS = NotchAgent/NotchAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "NotchAgent controls Spotify playback when you use the Spotify buttons.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "NotchAgent controls Spotify and Apple Music playback when you use the music buttons.";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "NotchAgent needs calendar access to show your next event.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "NotchAgent needs calendar access to show your next event.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "NotchAgent uses the camera for the mirror surface.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Omer Faruk Aras.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NotchAgent uses the microphone when you open agent listening.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.omerfarukaras.NotchAgent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -286,21 +287,22 @@
 				CODE_SIGN_ENTITLEMENTS = NotchAgent/NotchAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "NotchAgent controls Spotify playback when you use the Spotify buttons.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "NotchAgent controls Spotify and Apple Music playback when you use the music buttons.";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "NotchAgent needs calendar access to show your next event.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "NotchAgent needs calendar access to show your next event.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "NotchAgent uses the camera for the mirror surface.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Omer Faruk Aras.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NotchAgent uses the microphone when you open agent listening.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.omerfarukaras.NotchAgent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

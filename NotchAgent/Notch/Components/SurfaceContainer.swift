@@ -80,6 +80,7 @@ struct SurfaceContainer: View {
                     state: appState.notchState,
                     message: appState.agentStatusMessage,
                     routerMode: appState.routerModel,
+                    inputLevel: appState.agentInputLevel,
                     onListen: onAgentListen,
                     onThink: onAgentThink,
                     onRun: onAgentRun,

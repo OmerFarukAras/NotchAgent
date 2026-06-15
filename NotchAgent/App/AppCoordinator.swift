@@ -17,6 +17,7 @@ final class AppCoordinator {
     let notchViewModel: NotchViewModel
 
     private let notchWindowController: NotchWindowController
+    private let audioLevelMonitor = AudioLevelMonitor()
     private var shortcutRef: EventHotKeyRef?
     private var shortcutEventHandler: EventHandlerRef?
 
@@ -74,6 +75,36 @@ final class AppCoordinator {
     func setDefaultShortcut(_ shortcut: String) {
         appState.defaultShortcut = shortcut
         configureGlobalShortcut(shortcut)
+    }
+
+    func activateAgentListening() {
+        if appState.notchState == .listening, appState.activeSurface == .agent {
+            stopAgentListening()
+            return
+        }
+
+        appState.isNotchVisible = true
+        notchWindowController.show()
+        notchViewModel.setAgentState(.listening, message: "Listening for a command")
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                try await self.audioLevelMonitor.start { [weak self] level in
+                    self?.appState.agentInputLevel = level
+                }
+            } catch {
+                self.appState.agentInputLevel = 0
+                self.notchViewModel.setAgentState(.error, message: "Allow microphone access to listen")
+            }
+        }
+    }
+
+    func stopAgentListening() {
+        audioLevelMonitor.stop()
+        appState.agentInputLevel = 0
+        notchViewModel.setAgentState(.idle, message: "Listening stopped")
     }
 
     func checkForUpdates(force: Bool = false) {
@@ -142,7 +173,7 @@ final class AppCoordinator {
                     .takeUnretainedValue()
 
                 Task { @MainActor in
-                    coordinator.toggleNotchVisibility()
+                    coordinator.activateAgentListening()
                 }
 
                 return noErr
@@ -164,7 +195,7 @@ final class AppCoordinator {
         )
 
         appState.shortcutStatusMessage = status == noErr
-            ? "\(shortcut) active"
+            ? "\(shortcut) opens agent listening"
             : "Shortcut unavailable"
     }
 
