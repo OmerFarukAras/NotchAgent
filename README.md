@@ -1,5 +1,7 @@
 # NotchAgent
 
+<img src="docs/assets/icon.png" width="200" alt="NotchAgent Icon">
+
 NotchAgent is a local-first macOS notch companion that turns the top-center screen area into a compact control surface.
 
 The project is currently an early SwiftUI prototype. The shell, notch window, widget surfaces, settings, Spotify and Apple Music controls, calendar preview, weather placeholder, and camera mirror surface are in progress. AI routing and model-backed commands are planned next.
