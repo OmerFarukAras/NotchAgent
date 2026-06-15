@@ -52,7 +52,10 @@ struct SettingsView: View {
         switch section {
         case .general:
             settingsGroup {
-                Toggle("Show notch", isOn: showNotchBinding)
+                LabeledContent("Version", value: appVersionText)
+
+                Divider()
+
                 Toggle("Open NotchAgent at login", isOn: openAtLoginBinding)
                 LabeledContent("Login item", value: appState.startupStatusMessage)
 
@@ -224,18 +227,17 @@ struct SettingsView: View {
         .frame(maxWidth: 520, alignment: .leading)
     }
 
-    private var showNotchBinding: Binding<Bool> {
-        Binding(
-            get: { appState.isNotchVisible },
-            set: { coordinator.setNotchVisibility($0) }
-        )
-    }
-
     private var openAtLoginBinding: Binding<Bool> {
         Binding(
             get: { appState.openAtLogin },
             set: { coordinator.setOpenAtLogin($0) }
         )
+    }
+
+    private var appVersionText: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+        return "\(version) (\(build))"
     }
 
     private var shortcutBinding: Binding<String> {

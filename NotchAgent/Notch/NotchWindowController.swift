@@ -34,10 +34,8 @@ final class NotchWindowController {
 
         let rootView = NotchView(
             viewModel: viewModel,
-            onHideNotch: { [weak appState, weak viewModel, weak panel] in
-                appState?.isNotchVisible = false
-                viewModel?.closeSurface()
-                panel?.orderOut(nil)
+            onQuit: {
+                NSApplication.shared.terminate(nil)
             }
         )
         .environment(appState)

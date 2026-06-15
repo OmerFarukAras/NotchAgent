@@ -32,7 +32,7 @@ final class AppCoordinator {
 
         Task { @MainActor [weak self] in
             await Task.yield()
-            guard let self, self.appState.isNotchVisible else { return }
+            guard let self else { return }
             self.notchWindowController.show()
         }
 
@@ -42,7 +42,8 @@ final class AppCoordinator {
     }
 
     func toggleNotchVisibility() {
-        setNotchVisibility(!appState.isNotchVisible)
+        appState.isNotchVisible = true
+        notchWindowController.show()
     }
 
     func setNotchVisibility(_ isVisible: Bool) {
@@ -50,7 +51,7 @@ final class AppCoordinator {
         if isVisible {
             notchWindowController.show()
         } else {
-            notchWindowController.hide()
+            NSApplication.shared.terminate(nil)
         }
     }
 

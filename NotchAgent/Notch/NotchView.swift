@@ -13,7 +13,7 @@ import SwiftUI
 /// The notch only expands horizontally and downward — never pushes the top bar.
 struct NotchView: View {
     var viewModel: NotchViewModel
-    var onHideNotch: () -> Void
+    var onQuit: () -> Void
 
     private var appState: AppState { viewModel.appState }
 
@@ -50,8 +50,8 @@ struct NotchView: View {
                     SettingsLink {
                         Text("Settings")
                     }
-                    Button("Hide Notch") {
-                        onHideNotch()
+                    Button("Quit NotchAgent") {
+                        onQuit()
                     }
                 }
         }

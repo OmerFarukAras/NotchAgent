@@ -17,9 +17,7 @@ final class AppState {
 
     var notchState: NotchState = .idle
     var isNotchExpanded = false
-    var isNotchVisible: Bool = UserDefaults.standard.object(forKey: "isNotchVisible") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(isNotchVisible, forKey: "isNotchVisible") }
-    }
+    var isNotchVisible = true
     var activeSurface: NotchSurface = .none
     var isSurfaceExpanded = false
 
@@ -127,6 +125,10 @@ final class AppState {
     var calendarNextEventTime = ""
     var eventDays: Set<String> = []
     var holidayDays: Set<String> = []
+
+    init() {
+        UserDefaults.standard.removeObject(forKey: "isNotchVisible")
+    }
 }
 
 enum NotchSurface {

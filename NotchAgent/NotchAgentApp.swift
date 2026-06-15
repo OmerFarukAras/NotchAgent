@@ -13,10 +13,6 @@ struct NotchAgentApp: App {
 
     var body: some Scene {
         MenuBarExtra("NotchAgent", systemImage: "sparkles") {
-            Button(coordinator.appState.isNotchVisible ? "Hide Notch" : "Show Notch") {
-                coordinator.toggleNotchVisibility()
-            }
-
             Button("Run Demo Flow") {
                 coordinator.notchViewModel.runDemoFlow()
             }
