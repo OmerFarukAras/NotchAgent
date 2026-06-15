@@ -22,4 +22,6 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: NotchAgent ${{ github.ref_name }}
+          generate_release_notes: true
           files: dist/NotchAgent.dmg
