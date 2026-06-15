@@ -62,7 +62,7 @@ final class AudioLevelMonitor {
         }
     }
 
-    private static func level(from buffer: AVAudioPCMBuffer) -> Double {
+    nonisolated private static func level(from buffer: AVAudioPCMBuffer) -> Double {
         guard let channelData = buffer.floatChannelData else { return 0 }
 
         let channelCount = Int(buffer.format.channelCount)
