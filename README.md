@@ -116,6 +116,13 @@ GitHub: [@omerfarukaras](https://github.com/omerfarukaras)
 
 Repository: [omerfarukaras/NotchAgent](https://github.com/omerfarukaras/NotchAgent)
 
+## Contributing
+
+Contributions are welcome! If you'd like to help improve NotchAgent, please feel free to fork the repository, make your changes, and submit a pull request. 
+Whether it's a bug fix, a new AI feature, or a UI enhancement, all contributions are appreciated.
+
 ## License
 
-MIT
+This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)** license.
+
+You are free to download, use, and modify the source code for your own personal, non-commercial use. However, you may not sell, distribute commercially, or publish this software as a paid product. See the [LICENSE](LICENSE) file for more details.
