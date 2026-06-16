@@ -14,6 +14,10 @@ import SwiftUI
 struct NotchView: View {
     var viewModel: NotchViewModel
     var onQuit: () -> Void
+    var onAgentListen: () -> Void
+    var onAgentStopAndProcess: () -> Void
+    var onAgentExecute: () -> Void
+    var onAgentReset: () -> Void
 
     private var appState: AppState { viewModel.appState }
 
@@ -102,14 +106,10 @@ struct NotchView: View {
                     onSpotifyVolumeChange: { volume in viewModel.setSpotifyVolume(to: volume) },
                     onCalendarDayTap: { date in viewModel.openCalendar(at: date) },
                     onWeatherTap: { viewModel.openWeatherApp() },
-                    onAgentListen: {
-                        viewModel.setAgentState(.listening, message: "Listening for a command")
-                    },
-                    onAgentThink: {
-                        viewModel.setAgentState(.thinking, message: "Routing with \(appState.routerModel.lowercased())")
-                    },
-                    onAgentRun: { viewModel.runDemoFlow() },
-                    onAgentReset: { viewModel.resetAgent() }
+                    onAgentListen: onAgentListen,
+                    onAgentThink: onAgentStopAndProcess,
+                    onAgentRun: onAgentExecute,
+                    onAgentReset: onAgentReset
                 )
                 .frame(height: viewModel.surfaceContentHeight)
                 .transition(.opacity.combined(with: .move(edge: .top)))

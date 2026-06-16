@@ -109,6 +109,70 @@ final class AppState {
     var agentStatusMessage = "Ready for a quick command"
     var agentInputLevel: Double = 0
 
+    // MARK: - Agent AI Pipeline
+
+    var agentTranscript = ""
+    var agentPhase: AgentPhase = .idle
+    var agentLastResponse = ""
+    var agentLastLatencyMs: Int = 0
+    var agentError: String?
+    var agentCacheHit = false
+
+    // MARK: - AI Provider Settings
+
+    var selectedProvider: String = UserDefaults.standard.string(forKey: "selectedProvider") ?? "Ollama" {
+        didSet { UserDefaults.standard.set(selectedProvider, forKey: "selectedProvider") }
+    }
+
+    var ollamaBaseURL: String = UserDefaults.standard.string(forKey: "ollamaBaseURL") ?? "http://localhost:11434" {
+        didSet { UserDefaults.standard.set(ollamaBaseURL, forKey: "ollamaBaseURL") }
+    }
+
+    var ollamaModel: String = UserDefaults.standard.string(forKey: "ollamaModel") ?? "qwen2.5:3b" {
+        didSet { UserDefaults.standard.set(ollamaModel, forKey: "ollamaModel") }
+    }
+
+    var ollamaIsAvailable = false
+    var ollamaAvailableModels: [String] = []
+
+    var openAIAPIKey: String = UserDefaults.standard.string(forKey: "openAIAPIKey") ?? "" {
+        didSet { UserDefaults.standard.set(openAIAPIKey, forKey: "openAIAPIKey") }
+    }
+
+    var cacheEnabled: Bool = UserDefaults.standard.object(forKey: "cacheEnabled") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(cacheEnabled, forKey: "cacheEnabled") }
+    }
+
+    var cacheEntryCount: Int = 0
+
+    // MARK: - AI Experience Settings
+
+    var agentSilenceDetection: Bool = UserDefaults.standard.object(forKey: "agentSilenceDetection") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(agentSilenceDetection, forKey: "agentSilenceDetection") }
+    }
+
+    var agentVoiceFeedback: Bool = UserDefaults.standard.object(forKey: "agentVoiceFeedback") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(agentVoiceFeedback, forKey: "agentVoiceFeedback") }
+    }
+
+    var agentPlaySounds: Bool = UserDefaults.standard.object(forKey: "agentPlaySounds") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(agentPlaySounds, forKey: "agentPlaySounds") }
+    }
+
+    var speechRecognitionEngine: String = UserDefaults.standard.string(forKey: "speechRecognitionEngine") ?? SpeechRecognitionEngine.appleSpeech.rawValue {
+        didSet { UserDefaults.standard.set(speechRecognitionEngine, forKey: "speechRecognitionEngine") }
+    }
+
+    var whisperExecutablePath: String = UserDefaults.standard.string(forKey: "whisperExecutablePath") ?? "" {
+        didSet { UserDefaults.standard.set(whisperExecutablePath, forKey: "whisperExecutablePath") }
+    }
+
+    var whisperModelPath: String = UserDefaults.standard.string(forKey: "whisperModelPath") ?? "" {
+        didSet { UserDefaults.standard.set(whisperModelPath, forKey: "whisperModelPath") }
+    }
+
+    var whisperStatusMessage = "Not checked"
+
     // MARK: - Settings
 
     var closeSurfaceOnOutsideClick: Bool = UserDefaults.standard.object(forKey: "closeSurfaceOnOutsideClick") as? Bool ?? true {
@@ -167,6 +231,11 @@ final class AppState {
 
     init() {
         UserDefaults.standard.removeObject(forKey: "isNotchVisible")
+        if !UserDefaults.standard.bool(forKey: "speechRecognitionDefaultMigratedToApple"),
+           speechRecognitionEngine == SpeechRecognitionEngine.automatic.rawValue {
+            speechRecognitionEngine = SpeechRecognitionEngine.appleSpeech.rawValue
+            UserDefaults.standard.set(true, forKey: "speechRecognitionDefaultMigratedToApple")
+        }
     }
 }
 
@@ -177,4 +246,14 @@ enum NotchSurface {
     case calendar
     case weather
     case agent
+}
+
+/// Pipeline phase for the AI command system.
+enum AgentPhase: String {
+    case idle
+    case listening
+    case processing
+    case executing
+    case done
+    case error
 }

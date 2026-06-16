@@ -151,6 +151,7 @@ enum Design {
         static let calendarDetailedContentHeight: CGFloat = 198
         static let weatherDetailedContentHeight: CGFloat = 132
         static let agentContentHeight: CGFloat = 72
+        static let agentDetailedContentHeight: CGFloat = 260
         static let surfaceRowHeight: CGFloat = 52
         static let mirrorRowHeight: CGFloat = 72
     }

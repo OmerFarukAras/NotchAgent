@@ -9,46 +9,131 @@ import SwiftUI
 
 /// Local-first agent control surface for the right-side AI indicator.
 struct AgentSurface: View {
+    let isExpanded: Bool
     let state: NotchState
     let message: String
     let routerMode: String
     let inputLevel: Double
+    let transcript: String
+    let cacheHit: Bool
+    let onTap: () -> Void
     let onListen: () -> Void
     let onThink: () -> Void
     let onRun: () -> Void
     let onReset: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            stateBadge
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                stateBadge
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(state.title)
-                    .font(Design.Typography.surfaceTitle)
-                    .foregroundStyle(Design.Colors.surfaceLabel)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(state.title)
+                            .font(Design.Typography.surfaceTitle)
+                            .foregroundStyle(Design.Colors.surfaceLabel)
+                            .lineLimit(1)
 
-                Text(message)
-                    .font(Design.Typography.surfaceSubtitle)
-                    .foregroundStyle(Design.Colors.surfaceSublabel)
-                    .lineLimit(1)
+                        if cacheHit {
+                            Text("⚡")
+                                .font(.system(size: 10))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(
+                                    Design.Colors.stateAction.opacity(0.25),
+                                    in: Capsule()
+                                )
+                        }
+                    }
 
-                Text(routerMode)
-                    .font(Design.Typography.surfaceCaption)
-                    .foregroundStyle(Design.Colors.surfaceMuted)
-                    .lineLimit(1)
+                    // Compact view shows 1-2 lines
+                    if !isExpanded {
+                        if !transcript.isEmpty {
+                            Text(transcript)
+                                .font(Design.Typography.surfaceSubtitle)
+                                .foregroundStyle(Design.Colors.surfaceSecondary)
+                                .lineLimit(2)
+                                .animation(.easeOut(duration: 0.15), value: transcript)
+                        } else {
+                            Text(message)
+                                .font(Design.Typography.surfaceSubtitle)
+                                .foregroundStyle(Design.Colors.surfaceSublabel)
+                                .lineLimit(1)
+                        }
+                    }
 
-                if state == .listening {
-                    ListeningMeter(inputLevel: inputLevel)
-                        .padding(.top, 2)
+                    Text(routerMode)
+                        .font(Design.Typography.surfaceCaption)
+                        .foregroundStyle(Design.Colors.surfaceMuted)
+                        .lineLimit(1)
+
+                    if state == .listening && !isExpanded {
+                        ListeningMeter(inputLevel: inputLevel)
+                            .padding(.top, 2)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                if !isExpanded {
+                    controls
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onTap)
 
-            Spacer(minLength: 8)
+            // Expanded view
+            if isExpanded {
+                Divider()
+                    .opacity(0.5)
 
-            controls
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !transcript.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Transcript")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Design.Colors.surfaceMuted)
+                                
+                                Text(transcript)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Design.Colors.surfaceSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+
+                        if !message.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Response")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Design.Colors.surfaceMuted)
+
+                                Text(message)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Design.Colors.surfaceLabel)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+
+                        if state == .listening {
+                            HStack {
+                                Spacer()
+                                ListeningMeter(inputLevel: inputLevel)
+                                Spacer()
+                            }
+                            .padding(.top, 8)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                controls
+            }
         }
         .padding(.horizontal, Design.Spacing.surfaceInternalPadding)
+        .padding(.vertical, 12)
     }
 
     private var stateBadge: some View {

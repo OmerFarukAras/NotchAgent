@@ -58,7 +58,7 @@ final class NotchViewModel {
             case .mirror: Design.Sizes.mirrorDetailedContentHeight
             case .calendar: Design.Sizes.calendarDetailedContentHeight
             case .weather: Design.Sizes.weatherDetailedContentHeight
-            case .agent: Design.Sizes.agentContentHeight
+            case .agent: Design.Sizes.agentDetailedContentHeight
             }
         } else {
             switch appState.activeSurface {
@@ -298,6 +298,58 @@ final class NotchViewModel {
                 }
             }
         }
+    }
+
+    func searchAndPlayMusic(query: String) {
+        let parsedSearch = parseMusicSearch(query)
+        let provider = parsedSearch.provider
+        let query = parsedSearch.query
+        
+        switch provider {
+        case .spotify:
+            appState.spotifyStatusMessage = "Searching..."
+            let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+            let source = """
+            tell application "Spotify"
+                play track "spotify:search:\(encodedQuery)"
+            end tell
+            """
+            var error: NSDictionary?
+            NSAppleScript(source: source)?.executeAndReturnError(&error)
+            
+            if error != nil {
+                appState.notchState = .error
+                appState.agentStatusMessage = "Could not play search result"
+            } else {
+                appState.notchState = .result
+                appState.agentStatusMessage = "Playing \(query)"
+                refreshSpotifyState(after: .milliseconds(500))
+            }
+            
+        case .appleMusic:
+            // Apple Music does not support play track URL via AppleScript natively without library matching.
+            // Best effort is opening the search page.
+            if let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+               let url = URL(string: "musics://search?term=\(encodedQuery)") {
+                NSWorkspace.shared.open(url)
+                appState.notchState = .result
+                appState.agentStatusMessage = "Opened search in Apple Music"
+            }
+        }
+    }
+
+    private func parseMusicSearch(_ rawQuery: String) -> (provider: AppState.MusicProvider, query: String) {
+        let lowercasedQuery = rawQuery.lowercased()
+
+        if lowercasedQuery.hasPrefix("spotify::") {
+            return (.spotify, String(rawQuery.dropFirst("spotify::".count)))
+        }
+
+        if lowercasedQuery.hasPrefix("applemusic::") {
+            return (.appleMusic, String(rawQuery.dropFirst("applemusic::".count)))
+        }
+
+        return (selectedMusicProvider, rawQuery)
     }
 
     func toggleSpotifyPlayback() {

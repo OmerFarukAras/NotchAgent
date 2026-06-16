@@ -77,10 +77,14 @@ struct SurfaceContainer: View {
                     .transition(.opacity)
             case .agent:
                 AgentSurface(
+                    isExpanded: appState.isSurfaceExpanded,
                     state: appState.notchState,
                     message: appState.agentStatusMessage,
                     routerMode: appState.routerModel,
                     inputLevel: appState.agentInputLevel,
+                    transcript: appState.agentTranscript,
+                    cacheHit: appState.agentCacheHit,
+                    onTap: { appState.isSurfaceExpanded.toggle() },
                     onListen: onAgentListen,
                     onThink: onAgentThink,
                     onRun: onAgentRun,

@@ -43,6 +43,9 @@ struct SettingsView: View {
             }
         }
         .frame(width: 600, height: 460)
+        .onAppear {
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     private var selectedMusicProvider: AppState.MusicProvider {
@@ -193,16 +196,116 @@ struct SettingsView: View {
             }
         case .ai:
             settingsGroup {
+                Picker("Provider", selection: $appState.selectedProvider) {
+                    Text("Ollama").tag("Ollama")
+                    Text("OpenAI").tag("OpenAI")
+                }
+
+                Divider()
+
+                // Ollama settings
+                if appState.selectedProvider == "Ollama" {
+                    TextField("Ollama URL", text: $appState.ollamaBaseURL)
+                        .textFieldStyle(.roundedBorder)
+
+                    if appState.ollamaAvailableModels.isEmpty {
+                        TextField("Model", text: $appState.ollamaModel)
+                            .textFieldStyle(.roundedBorder)
+                    } else {
+                        Picker("Model", selection: $appState.ollamaModel) {
+                            ForEach(appState.ollamaAvailableModels, id: \.self) { model in
+                                Text(model).tag(model)
+                            }
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(appState.ollamaIsAvailable ? Color.green : Color.red)
+                            .frame(width: 8, height: 8)
+                        Text(appState.ollamaIsAvailable ? "Connected" : "Not running")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Check Connection") {
+                        Task {
+                            await coordinator.checkOllamaHealth()
+                        }
+                    }
+                }
+
+                // OpenAI settings
+                if appState.selectedProvider == "OpenAI" {
+                    SecureField("API Key", text: $appState.openAIAPIKey)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                Divider()
+
+                // Router mode
                 Picker("Router mode", selection: $appState.routerModel) {
                     Text("Rules first").tag("Rules first")
-                    Text("Ollama fallback").tag("Ollama fallback")
+                    Text("LLM fallback").tag("LLM fallback")
                     Text("Manual only").tag("Manual only")
                 }
 
-                LabeledContent("Router model", value: "qwen2.5:3b")
-                LabeledContent("Main model", value: "qwen2.5:7b")
-                LabeledContent("Agent state", value: appState.notchState.title)
+                Divider()
+
+                // Cache settings
+                Toggle("Command cache", isOn: $appState.cacheEnabled)
+                LabeledContent("Cached commands", value: "\(appState.cacheEntryCount)")
+
+                Button("Clear Cache") {
+                    coordinator.clearCommandCache()
+                }
+                .disabled(appState.cacheEntryCount == 0)
+
+                Divider()
+
+                // Experience settings
+                Picker("Speech engine", selection: $appState.speechRecognitionEngine) {
+                    ForEach(SpeechRecognitionEngine.allCases) { engine in
+                        Text(engine.rawValue).tag(engine.rawValue)
+                    }
+                }
+
+                if appState.speechRecognitionEngine != SpeechRecognitionEngine.appleSpeech.rawValue {
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Whisper model path", text: $appState.whisperModelPath)
+                            .textFieldStyle(.roundedBorder)
+
+                        HStack(spacing: 10) {
+                            Button("Choose Model...") {
+                                coordinator.chooseWhisperModel()
+                            }
+
+                            Button("Test Whisper") {
+                                coordinator.testWhisperConfiguration()
+                            }
+                        }
+                    }
+
+                    LabeledContent("Whisper", value: appState.whisperStatusMessage)
+
+                    Text("Uses whisper-cli from Homebrew with language auto-detection. Select a model file here.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Toggle("Silence detection (Auto-send)", isOn: $appState.agentSilenceDetection)
+                Toggle("Voice feedback (Text-to-Speech)", isOn: $appState.agentVoiceFeedback)
+                Toggle("Play sound effects", isOn: $appState.agentPlaySounds)
+
+                Divider()
+
+                // Status
+                LabeledContent("Agent state", value: appState.agentPhase.rawValue.capitalized)
                 LabeledContent("Last message", value: appState.agentStatusMessage)
+
+                if !appState.agentTranscript.isEmpty {
+                    LabeledContent("Last transcript", value: appState.agentTranscript)
+                }
 
                 HStack(spacing: 10) {
                     Button("Run demo") {
@@ -210,7 +313,7 @@ struct SettingsView: View {
                     }
 
                     Button("Reset agent") {
-                        coordinator.notchViewModel.resetAgent()
+                        coordinator.resetAgent()
                     }
                 }
             }

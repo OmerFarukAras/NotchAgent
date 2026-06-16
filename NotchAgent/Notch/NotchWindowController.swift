@@ -18,6 +18,12 @@ final class NotchWindowController {
     private var hideTask: Task<Void, Never>?
     private var outsideClickMonitor: Any?
 
+    /// Agent action closures — wired by AppCoordinator.
+    var onAgentListen: () -> Void = {}
+    var onAgentStopAndProcess: () -> Void = {}
+    var onAgentExecute: () -> Void = {}
+    var onAgentReset: () -> Void = {}
+
     init(appState: AppState, viewModel: NotchViewModel) {
         self.appState = appState
         self.viewModel = viewModel
@@ -32,11 +38,14 @@ final class NotchWindowController {
         )
         self.panel = panel
 
+        // Placeholder root view — will be replaced in show() after callbacks are set
         let rootView = NotchView(
             viewModel: viewModel,
-            onQuit: {
-                NSApplication.shared.terminate(nil)
-            }
+            onQuit: { NSApplication.shared.terminate(nil) },
+            onAgentListen: { },
+            onAgentStopAndProcess: { },
+            onAgentExecute: { },
+            onAgentReset: { }
         )
         .environment(appState)
 
@@ -51,6 +60,23 @@ final class NotchWindowController {
 
         installOutsideClickMonitor()
     }
+
+    /// Rebuild the root view with current agent callbacks.
+    /// Call this after setting the callback closures.
+    func rebuildRootView() {
+        let rootView = NotchView(
+            viewModel: viewModel,
+            onQuit: { NSApplication.shared.terminate(nil) },
+            onAgentListen: onAgentListen,
+            onAgentStopAndProcess: onAgentStopAndProcess,
+            onAgentExecute: onAgentExecute,
+            onAgentReset: onAgentReset
+        )
+        .environment(appState)
+
+        panel.contentView = NSHostingView(rootView: rootView)
+    }
+
 
     deinit {
         if let outsideClickMonitor {
