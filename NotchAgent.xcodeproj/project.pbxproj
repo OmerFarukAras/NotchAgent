@@ -252,14 +252,14 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = H8LY4Y9T93;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Notch Agent";
+				INFOPLIST_KEY_CFBundleDisplayName = Notch;
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"com.omerfarukaras.NotchAgent\";\n    CFBundleURLSchemes =     (\n        notchagent\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "NotchAgent controls Spotify and Apple Music playback when you use the music buttons.";
@@ -268,12 +268,14 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "NotchAgent uses the camera for the mirror surface.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Omer Faruk Aras.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NotchAgent uses the microphone when you open agent listening.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "NotchAgent needs screen recording permission to see the screen and answer your contextual questions.";
+				INFOPLIST_KEY_NSAccessibilityUsageDescription = "NotchAgent needs accessibility access to type text and trigger global shortcuts on your behalf.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NotchAgent uses speech recognition to transcribe your voice commands.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.omerfarukaras.NotchAgent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -295,14 +297,14 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = H8LY4Y9T93;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Notch Agent";
+				INFOPLIST_KEY_CFBundleDisplayName = Notch;
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"com.omerfarukaras.NotchAgent\";\n    CFBundleURLSchemes =     (\n        notchagent\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "NotchAgent controls Spotify and Apple Music playback when you use the music buttons.";
@@ -311,12 +313,14 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "NotchAgent uses the camera for the mirror surface.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Omer Faruk Aras.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NotchAgent uses the microphone when you open agent listening.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "NotchAgent needs screen recording permission to see the screen and answer your contextual questions.";
+				INFOPLIST_KEY_NSAccessibilityUsageDescription = "NotchAgent needs accessibility access to type text and trigger global shortcuts on your behalf.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NotchAgent uses speech recognition to transcribe your voice commands.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.omerfarukaras.NotchAgent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

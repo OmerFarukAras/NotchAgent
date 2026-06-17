@@ -12,26 +12,28 @@
   <b><a href="docs/screenshots.md">📸 View the full Screenshot Gallery here!</a></b>
 </p>
 
-NotchAgent is a local-first macOS notch companion that turns the top-center screen area into a compact control surface.
+NotchAgent is a local-first macOS notch companion that turns the top-center screen area into a compact control surface and a powerful AI Assistant.
 
 The project is an evolving SwiftUI application. It currently features a dynamic notch window shell, multiple widget surfaces (Settings, Calendar, Camera Mirror, Music), and a fully functional AI Command Pipeline with voice recognition (Push-to-Talk) backed by local Ollama models or OpenAI.
 
-## What's New in v1.1.0
+## What's New in v1.2.0
 
-- Added a voice-first AI command pipeline with push-to-talk listening, live transcript updates, command parsing, confirmation flow, and native execution.
-- Added local Ollama and OpenAI command providers, with a response cache for repeated commands.
-- Added optional whisper.cpp transcription support for mixed Turkish/English speech. Apple Speech remains the default engine; Whisper can be enabled from Settings with a selected model file.
-- Added a Whisper test action in Settings and Homebrew-friendly `whisper-cli` detection.
-- Added smarter Turkish/English music commands for Spotify and Apple Music, including artist, playlist, radio, chart, and stylized artist-name correction such as `lvbelc5`.
-- Added multi-tab browser commands such as opening Safari with YouTube and GitHub in one request.
-- Added speech recognition permissions, app URL scheme metadata, and the native automation plumbing needed for AI actions.
-- Updated the app version to `1.1.0` with build `6`.
+- **Multi-step AI Command Execution:** The AI can now plan and execute multiple tasks in sequence (e.g., "Open Safari and type 'macOS tips'"). Includes fault tolerance that safely halts execution if a step fails.
+- **Agent Eyes Animation:** A dynamic visual indicator mimicking "eyes" looking around during processing, bringing the Notch to life.
+- **SwiftData Long-Term Memory:** 
+  - **Facts Memory:** Automatically extracts personal preferences or facts from your voice commands and injects them into future prompts.
+  - **Command Cache:** Remembers past executed commands and returns them instantly via a highly optimized local database.
+- **Siri & AppIntents Integration:** You can now trigger the assistant globally by saying **"Hey Siri, Talk to Notch"** or **"Trigger Notch"** to bypass manual clicks.
+- **Vision Capabilities:** Experimental screen capturing context for LLM processing.
+- **Interactive Speech Feedback:** Enhanced voice feedback logic with sentence-by-sentence queueing and instant interruption when user starts speaking again.
+- **Advanced Applescript Sandbox Evasion:** Natively types text, opens multi-tab browser URLs, and launches apps without relying on fragile AppleScript targets.
 
 ## Current Features
 
 - Top-center notch panel with compact and expanded states
 - Menu bar app with settings access
 - Local settings stored with `UserDefaults`
+- SwiftData-powered personal agent memory
 - Global shortcut toggle for notch visibility
 - Music surface with native Spotify and Apple Music playback controls
 - Camera mirror surface with `AVCaptureSession`
@@ -39,13 +41,13 @@ The project is an evolving SwiftUI application. It currently features a dynamic 
 - Weather surface placeholder
 - **Voice-first AI Command Pipeline:**
   - Push-to-talk speech recognition
+  - AppIntents/Siri Trigger Support
   - Optional whisper.cpp transcription for mixed Turkish/English commands
   - Local AI model processing via Ollama (`qwen2.5` or others)
   - OpenAI provider support
-  - Caching system for instant execution of previously learned commands
+  - Fast SwiftData caching system for instant execution of previously learned commands
   - Natural language parsing to natively open apps and URLs (e.g., "open github.com")
   - Smart default music app tracking, Spotify/Apple Music search, and multi-turn conversational confirmation for ambiguous commands
-- GitHub Releases update checks without a custom server
 
 ## Planned
 
@@ -56,15 +58,16 @@ The project is an evolving SwiftUI application. It currently features a dynamic 
 
 ## Requirements
 
-- macOS
-- Xcode
+- macOS 14.0+
+- Xcode 15+
 - SwiftUI / AppKit-capable macOS target
 
 Some features require macOS permissions:
-
-- Camera access for the mirror surface
-- Calendar access for upcoming events
-- Automation access for Spotify and Apple Music controls
+- **Camera:** For the mirror surface
+- **Calendar:** For upcoming events
+- **Automation / AppleEvents:** For Spotify and Apple Music controls
+- **Screen Recording:** For Vision context understanding
+- **Accessibility:** For typing text macros
 
 ### whisper.cpp transcription
 

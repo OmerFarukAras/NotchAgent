@@ -78,14 +78,14 @@ final class AppCoordinator {
             self.stopAndProcess()
         }
 
-        manager.onCommandReady = { [weak appState, weak self] command, wasCacheHit in
+        manager.onPlanReady = { [weak appState, weak self] plan, wasCacheHit in
             appState?.agentCacheHit = wasCacheHit
-            appState?.agentLastResponse = command.summary ?? "Done"
+            appState?.agentLastResponse = plan.steps.first?.summary ?? "Done"
             
             // Automatically execute the command script
-            self?.aiManager.executeCommand(command)
+            self?.aiManager.executeCommandPlan(plan)
 
-            if command.action == "answer" {
+            if plan.steps.contains(where: { $0.action == "answer" }) {
                 // For chat/answers, expand the UI to show the full text
                 appState?.isSurfaceExpanded = true
             } else {
@@ -254,10 +254,10 @@ final class AppCoordinator {
         }
     }
 
-    /// Execute the last parsed command.
+    /// Execute the last parsed command plan.
     func executeLastCommand() {
-        guard let command = aiManager.lastCommand else { return }
-        aiManager.executeCommand(command)
+        guard let plan = aiManager.lastPlan else { return }
+        aiManager.executeCommandPlan(plan)
     }
 
     /// Stop everything and reset agent to idle.

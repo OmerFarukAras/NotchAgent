@@ -26,7 +26,7 @@ final class AICommandManager {
 
     private let speechRecognizer = SpeechRecognizer()
     private let speechSynthesizer = SpeechSynthesizer()
-    private let cache = CommandCache()
+    private let cacheEnabledKey = "notchagent.cacheEnabled"
 
     private var ollamaProvider: OllamaProvider
     private var openAIProvider: OpenAIProvider
@@ -36,7 +36,7 @@ final class AICommandManager {
     private(set) var phase: AgentPhase = .idle
     private(set) var lastTranscript = ""
     private(set) var lastResponse: LLMResponse?
-    private(set) var lastCommand: ParsedCommand?
+    private(set) var lastPlan: CommandPlan?
     private(set) var wasCacheHit = false
     private(set) var pendingCommand: ParsedCommand?
 
@@ -58,15 +58,15 @@ final class AICommandManager {
     /// Called with the audio input level for the waveform.
     var onLevelChange: ((Double) -> Void)?
 
-    /// Called when a command has been parsed and is ready to display/execute.
-    var onCommandReady: ((ParsedCommand, Bool) -> Void)?
+    /// Called when a command plan has been parsed and is ready to display/execute.
+    var onPlanReady: ((CommandPlan, Bool) -> Void)?
 
     /// Called when silence is detected.
     var onSilenceDetected: (() -> Void)?
 
     // MARK: - System Prompt
 
-    private func buildSystemPrompt(defaultMusicApp: String, clipboardText: String?) -> String {
+    private func buildSystemPrompt(defaultMusicApp: String, clipboardText: String?, recentFacts: [Fact]) -> String {
         let defaultMusicContext = defaultMusicApp.isEmpty
             ? "The default music provider is not set. If the user asks to play music, ask them what app they want to use by returning action: 'ask_clarification', summary: 'What is your default music app?'"
             : "The user's default music provider is \(defaultMusicApp). If they ask to play music without specifying an app, use this default. To change their default music app to X, output action: 'change_setting', target: 'default_music_app', script: 'X'."
@@ -77,8 +77,8 @@ final class AICommandManager {
 
         return """
         You are a macOS desktop assistant embedded in a notch UI. The user gives voice commands.
-        You MUST respond with ONLY a JSON object in this exact format:
-
+        You MUST respond with ONLY a JSON object or a JSON array of objects in this exact format. If you need to perform multiple distinct actions, return an array of objects.
+        For a single action, you can just return the object:
         {
           "action": "action_type",
           "target": "target_name_or_null",
@@ -122,6 +122,9 @@ final class AICommandManager {
         - Respond in the same language as the user's command.
         - If you have a guessed action but are unsure, you can output the guessed action but set "needs_confirmation": true. If doing this, phrase your summary as a question (e.g. "Do you want to open GitHub?").
         - \(defaultMusicContext)\(clipboardContext)
+        
+        User Memory / Context:
+        \(recentFacts.map { "- \($0.content)" }.joined(separator: "\n"))
         """
     }
 
@@ -188,7 +191,7 @@ final class AICommandManager {
         setPhase(.listening, message: "Listening...")
         lastTranscript = ""
         lastResponse = nil
-        lastCommand = nil
+        lastPlan = nil
         wasCacheHit = false
         speechSynthesizer.stop()
 
@@ -250,9 +253,10 @@ final class AICommandManager {
             let shouldBypassCache = isMusicSearchIntent(transcript.lowercased(with: Locale(identifier: "tr_TR")))
 
             if let localCommand = localCommand(for: transcript) {
-                lastCommand = localCommand
+                let plan = CommandPlan(steps: [localCommand])
+                lastPlan = plan
                 if cacheEnabled {
-                    cache.store(
+                    MemoryManager.shared.cacheCommand(
                         intent: transcript,
                         response: LLMResponse(
                             text: localCommand.jsonString,
@@ -268,23 +272,31 @@ final class AICommandManager {
                 setPhase(.done, message: summary)
                 if playSounds { SoundEffectPlayer.play(.success) }
                 if voiceFeedback { speechSynthesizer.speak(summary) }
-                onCommandReady?(localCommand, false)
+                onPlanReady?(plan, false)
                 return
             }
 
             // Only check cache if there is no pending confirmation
-            if cacheEnabled, !shouldBypassCache, let cached = cache.lookup(transcript) {
+            if cacheEnabled, !shouldBypassCache, let cached = MemoryManager.shared.lookupCommand(intent: transcript) {
                 wasCacheHit = true
-                lastResponse = cached.response
-                lastCommand = cached.command
-
-                if let command = cached.command {
+                
+                if let responseData = cached.responseJSON.data(using: .utf8),
+                   let response = try? JSONDecoder().decode(LLMResponse.self, from: responseData) {
+                    lastResponse = response
+                }
+                
+                if let commandJSON = cached.commandJSON,
+                   let commandData = commandJSON.data(using: .utf8),
+                   let command = try? JSONDecoder().decode(ParsedCommand.self, from: commandData) {
+                    let plan = CommandPlan(steps: [command])
+                    lastPlan = plan
                     let summary = command.summary ?? "Done"
                     setPhase(.done, message: "⚡ \(summary)")
                     if playSounds { SoundEffectPlayer.play(.success) }
                     if voiceFeedback { speechSynthesizer.speak(summary) }
-                    onCommandReady?(command, true)
+                    onPlanReady?(plan, true)
                 } else {
+                    lastPlan = nil
                     setPhase(.done, message: "⚡ Cache hit")
                 }
                 return
@@ -293,19 +305,20 @@ final class AICommandManager {
 
         // 2. Generate initial command
         let provider = activeProvider(named: providerName)
+        let recentFacts = MemoryManager.shared.fetchRecentFacts()
         
         do {
             let response = try await provider.generate(
                 prompt: promptText,
-                systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText),
+                systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
                 image: nil,
                 overrideModel: nil
             )
 
-            var parsedCommand = ParsedCommand.parse(from: response.text)
+            var plan = CommandPlan.parse(from: response.text)
 
             // 3. Handle Screen Awareness (Vision) Round 2
-            if parsedCommand?.action == "take_screenshot" {
+            if plan?.steps.first?.action == "take_screenshot" {
                 setPhase(.processing, message: "Taking screenshot...")
                 
                 if let screenshotData = takeScreenshot() {
@@ -314,39 +327,44 @@ final class AICommandManager {
                     // Call the LLM again but using the vision model and the screenshot
                     let visionResponse = try await provider.generate(
                         prompt: "User's original request: '\(promptText)'. Look at this screenshot and fulfill their request.",
-                        systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText),
+                        systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
                         image: screenshotData,
                         overrideModel: visionModel
                     )
                     
-                    parsedCommand = ParsedCommand.parse(from: visionResponse.text)
+                    plan = CommandPlan.parse(from: visionResponse.text)
                 } else {
-                    parsedCommand = ParsedCommand(
-                        action: "answer",
-                        target: nil,
-                        script: nil,
-                        confidence: 1.0,
-                        summary: "Could not take screenshot. Please ensure Screen Recording permissions are granted in System Settings.",
-                        needs_confirmation: false
-                    )
+                    plan = CommandPlan(steps: [
+                        ParsedCommand(
+                            action: "answer",
+                            target: nil,
+                            script: nil,
+                            confidence: 1.0,
+                            summary: "Could not take screenshot. Please ensure Screen Recording permissions are granted in System Settings.",
+                            needs_confirmation: false
+                        )
+                    ])
                 }
             }
 
-            if let command = parsedCommand {
-                lastCommand = command
+            if let finalPlan = plan, !finalPlan.steps.isEmpty {
+                lastPlan = finalPlan
                 lastResponse = response
 
-                // Cache the result
+                // Cache the result (caching first command only for backward compatibility, or update cache model later)
                 let shouldBypassCache = isMusicSearchIntent(transcript.lowercased(with: Locale(identifier: "tr_TR")))
                 if cacheEnabled && !shouldBypassCache {
-                    cache.store(intent: transcript, response: response, command: command)
+                    MemoryManager.shared.cacheCommand(intent: transcript, response: response, command: finalPlan.steps.first!)
                 }
 
-                let summary = command.summary ?? "Done"
+                let summary = finalPlan.steps.first?.summary ?? "Done"
                 setPhase(.done, message: summary)
                 if playSounds { SoundEffectPlayer.play(.success) }
                 if voiceFeedback { speechSynthesizer.speak(summary) }
-                onCommandReady?(command, false)
+                onPlanReady?(finalPlan, false)
+                
+                // Extract and save facts asynchronously
+                extractAndSaveFacts(from: transcript, defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, provider: provider)
             } else {
                 // LLM returned something but it's not valid JSON
                 setPhase(.done, message: truncate(response.text, to: 50))
@@ -358,13 +376,35 @@ final class AICommandManager {
         }
     }
 
+    private func extractAndSaveFacts(from transcript: String, defaultMusicApp: String, clipboardText: String?, provider: LLMProvider) {
+        Task {
+            let prompt = "Extract any new personal facts, preferences, or important information about the user from this message: '\(transcript)'. Return ONLY a JSON object with action: 'save_fact', target: 'category (e.g. General, Personal, Music)', script: 'the fact text'. If there is nothing to save, return action: 'unknown'."
+            do {
+                let response = try await provider.generate(
+                    prompt: prompt,
+                    systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: []),
+                    image: nil,
+                    overrideModel: nil
+                )
+                if let plan = CommandPlan.parse(from: response.text),
+                   let command = plan.steps.first,
+                   command.action == "save_fact",
+                   let fact = command.script {
+                    MemoryManager.shared.addFact(content: fact, category: command.target ?? "General")
+                }
+            } catch {
+                print("Fact extraction failed: \(error)")
+            }
+        }
+    }
+
     /// Cancel any in-progress operation and reset to idle.
     func reset() {
         speechRecognizer.cancel()
         speechSynthesizer.stop()
         lastTranscript = ""
         lastResponse = nil
-        lastCommand = nil
+        lastPlan = nil
         pendingCommand = nil
         wasCacheHit = false
         setPhase(.idle, message: "Ready for a quick command")
@@ -372,27 +412,41 @@ final class AICommandManager {
 
     // MARK: - Command Execution
 
-    /// Execute a parsed command's AppleScript, if it has one.
-    func executeCommand(_ command: ParsedCommand) {
+    func executeCommandPlan(_ plan: CommandPlan) {
+        Task { @MainActor in
+            for command in plan.steps {
+                let success = executeSingleCommand(command)
+                if !success {
+                    // Halt execution if a step explicitly failed
+                    break
+                }
+                // Brief pause between sequential commands for stability
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+    }
+
+    /// Execute a parsed command's AppleScript, if it has one. Returns true if successful.
+    private func executeSingleCommand(_ command: ParsedCommand) -> Bool {
         let summary = command.summary ?? "Done"
         setPhase(.executing, message: "Running: \(summary)")
 
         if command.action == "ask_clarification" {
             setPhase(.done, message: summary)
-            return
+            return true
         }
 
         if command.needs_confirmation == true {
             pendingCommand = command
             setPhase(.done, message: summary)
-            return
+            return true
         }
 
         // Handle open_url natively
         if command.action == "open_url", let urlString = command.target, let url = URL(string: urlString.hasPrefix("http") ? urlString : "https://\(urlString)") {
             NSWorkspace.shared.open(url)
             setPhase(.done, message: "✓ \(summary)")
-            return
+            return true
         }
 
         // Handle multi-tab browser opens natively.
@@ -405,33 +459,33 @@ final class AICommandManager {
 
             guard !urls.isEmpty else {
                 setPhase(.error, message: "No URLs to open")
-                return
+                return false
             }
 
             openURLs(urls, inBrowser: browserName)
             setPhase(.done, message: "✓ \(summary)")
-            return
+            return true
         }
 
         // Handle music_control natively
         if command.action == "music_control" {
             onMusicControl?(command.target ?? "playpause")
             setPhase(.done, message: "✓ \(summary)")
-            return
+            return true
         }
 
         // Handle search_music natively
         if command.action == "search_music" {
             onMusicSearch?(command.target ?? "")
             setPhase(.done, message: "✓ \(summary)")
-            return
+            return true
         }
 
         // Handle change_setting natively
         if command.action == "change_setting", let setting = command.target, let value = command.script {
             onSettingChange?(setting, value)
             setPhase(.done, message: "✓ \(summary)")
-            return
+            return true
         }
 
         // Handle type_text natively
@@ -451,10 +505,11 @@ final class AICommandManager {
             
             if error != nil {
                 setPhase(.error, message: "Needs Accessibility Permission")
+                return false
             } else {
                 setPhase(.done, message: "✓ Typed Text")
+                return true
             }
-            return
         }
 
         // Handle open_app natively to bypass AppleScript sandbox restrictions
@@ -462,15 +517,16 @@ final class AICommandManager {
             let success = NSWorkspace.shared.launchApplication(appName)
             if success {
                 setPhase(.done, message: "✓ \(summary)")
+                return true
             } else {
                 setPhase(.error, message: "Could not open \(appName)")
+                return false
             }
-            return
         }
         
         guard let script = command.script, !script.isEmpty else {
             setPhase(.done, message: summary)
-            return
+            return true
         }
 
         var error: NSDictionary?
@@ -478,8 +534,10 @@ final class AICommandManager {
 
         if error != nil {
             setPhase(.error, message: "Script execution failed")
+            return false
         } else {
             setPhase(.done, message: "✓ \(summary)")
+            return true
         }
     }
 
@@ -497,10 +555,12 @@ final class AICommandManager {
 
     // MARK: - Cache Access
 
-    var cacheEntryCount: Int { cache.count }
+    /// Get the number of currently cached commands.
+    var cacheEntryCount: Int { MemoryManager.shared.getCacheCount() }
 
+    /// Clear all cached commands.
     func clearCache() {
-        cache.clear()
+        MemoryManager.shared.clearCache()
     }
 
     // MARK: - Private

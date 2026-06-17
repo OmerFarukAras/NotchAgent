@@ -272,6 +272,13 @@ struct SettingsView: View {
 
                 Divider()
 
+                // Memory settings
+                Button("Clear AI Memory") {
+                    MemoryManager.shared.clearMemory()
+                }
+
+                Divider()
+
                 // Experience settings
                 Picker("Speech engine", selection: $appState.speechRecognitionEngine) {
                     ForEach(SpeechRecognitionEngine.allCases) { engine in

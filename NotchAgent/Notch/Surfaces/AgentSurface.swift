@@ -137,11 +137,7 @@ struct AgentSurface: View {
     }
 
     private var stateBadge: some View {
-        Image(systemName: state.symbolName)
-            .font(.system(size: 18, weight: .bold))
-            .foregroundStyle(Design.Colors.stateColor(for: state))
-            .frame(width: 40, height: 40)
-            .background(Design.Colors.controlBackgroundActive, in: Circle())
+        AgentEyesView(state: state)
     }
 
     private var controls: some View {
