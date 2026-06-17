@@ -55,22 +55,27 @@ final class OllamaProvider: LLMProvider, @unchecked Sendable {
         }
     }
 
-    func generate(prompt: String, systemPrompt: String?) async throws -> LLMResponse {
+    func generate(prompt: String, systemPrompt: String?, image: Data?, overrideModel: String?) async throws -> LLMResponse {
         guard let url = URL(string: "\(baseURL)/api/generate") else {
             throw LLMError.providerUnavailable(name)
         }
 
         let startTime = CFAbsoluteTimeGetCurrent()
+        let targetModel = overrideModel ?? model
 
         // Build request body
         var body: [String: Any] = [
-            "model": model,
+            "model": targetModel,
             "prompt": prompt,
             "stream": false
         ]
 
         if let systemPrompt {
             body["system"] = systemPrompt
+        }
+        
+        if let image {
+            body["images"] = [image.base64EncodedString()]
         }
 
         // Lower temperature for deterministic command generation
@@ -113,7 +118,7 @@ final class OllamaProvider: LLMProvider, @unchecked Sendable {
 
         return LLMResponse(
             text: responseText.trimmingCharacters(in: .whitespacesAndNewlines),
-            model: model,
+            model: targetModel,
             provider: name,
             latencyMs: latencyMs
         )

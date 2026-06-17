@@ -211,8 +211,17 @@ struct SettingsView: View {
                     if appState.ollamaAvailableModels.isEmpty {
                         TextField("Model", text: $appState.ollamaModel)
                             .textFieldStyle(.roundedBorder)
+                            
+                        TextField("Vision Model", text: $appState.ollamaVisionModel)
+                            .textFieldStyle(.roundedBorder)
                     } else {
                         Picker("Model", selection: $appState.ollamaModel) {
+                            ForEach(appState.ollamaAvailableModels, id: \.self) { model in
+                                Text(model).tag(model)
+                            }
+                        }
+                        
+                        Picker("Vision Model", selection: $appState.ollamaVisionModel) {
                             ForEach(appState.ollamaAvailableModels, id: \.self) { model in
                                 Text(model).tag(model)
                             }

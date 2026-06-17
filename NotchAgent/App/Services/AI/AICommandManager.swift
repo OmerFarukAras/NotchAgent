@@ -66,10 +66,14 @@ final class AICommandManager {
 
     // MARK: - System Prompt
 
-    private func buildSystemPrompt(defaultMusicApp: String) -> String {
+    private func buildSystemPrompt(defaultMusicApp: String, clipboardText: String?) -> String {
         let defaultMusicContext = defaultMusicApp.isEmpty
             ? "The default music provider is not set. If the user asks to play music, ask them what app they want to use by returning action: 'ask_clarification', summary: 'What is your default music app?'"
             : "The user's default music provider is \(defaultMusicApp). If they ask to play music without specifying an app, use this default. To change their default music app to X, output action: 'change_setting', target: 'default_music_app', script: 'X'."
+            
+        let clipboardContext = clipboardText != nil 
+            ? "\n- The user's clipboard currently contains: \"\(clipboardText!)\". If the user asks you to summarize, rewrite, or explain without specifying what, they are likely referring to this text. Use the 'answer' action or 'type_text' action depending on context." 
+            : ""
 
         return """
         You are a macOS desktop assistant embedded in a notch UI. The user gives voice commands.
@@ -87,7 +91,7 @@ final class AICommandManager {
         Available actions:
         - "open_app": Open an application. Set "target" to the app name.
         - "open_url": Open a website. Set "target" to the URL (e.g. "https://github.com").
-        - "open_urls": Open multiple websites in a browser. Set "target" to the browser app name (e.g. "Safari", "Google Chrome") and set "script" to one URL per line (e.g. "https://youtube.com\\nhttps://github.com"). Use this for commands like "open Safari with YouTube and GitHub".
+        - "open_urls": Open multiple websites in a browser. Set "target" to the browser app name (e.g. "Safari", "Google Chrome") and set "script" to one URL per line (e.g. "https://youtube.com\nhttps://github.com"). Use this for commands like "open Safari with YouTube and GitHub".
         - "music_control": Control music playback. Set "target" to "play", "pause", "next", "previous", "shuffle", "repeat".
         - "search_music": Search and play a specific song, artist, album, radio, chart, or playlist. Set "target" to the exact search query (e.g. "lvbelc5", "Motive", "Motive radio", "Motive Top 50", "araba musics piyasa"). If the user explicitly says Spotify, prefix the target with "spotify::"; if they explicitly say Apple Music, prefix it with "applemusic::".
         - "type_text": Dictate, paste, or type text into the currently active application. Set "script" to the exact text you want to type. Format it perfectly (e.g. if the user dictates code, format it as code).
@@ -98,12 +102,13 @@ final class AICommandManager {
         - "answer": Just answer a question. Set "summary" to the answer. No script needed.
         - "change_setting": Change a user setting. Set "target" to the setting name (e.g. "default_music_app") and "script" to the value.
         - "ask_clarification": If the command is too ambiguous, ask the user. Put your question in "summary".
+        - "take_screenshot": If the user asks about the screen, what they are looking at, or uses words like 'buradaki', 'ekrandaki', 'bunu', output action: 'take_screenshot'. The system will take a screenshot and pass it back to you.
         - "unknown": You don't understand the command.
 
         Rules:
         - ONLY output the JSON object, nothing else.
         - Keep "summary" short (under 60 characters).
-        - For AppleScript, use "tell application" syntax. You MUST escape inner quotes using backslashes (e.g. "tell application \\"Safari\\"").
+        - For AppleScript, use "tell application" syntax. You MUST escape inner quotes using backslashes (e.g. "tell application \"Safari\"").
         - Handle mixed language input robustly (e.g. Turkish and English). The speech-to-text system may misspell English app names phonetically (e.g. "kodex" -> "Codex", "anti graviti" -> "Anti Gravity"). You MUST correct these misspellings before executing the command.
         - Treat Turkish and English music commands as semantic search_music requests, not literal app-opening requests. Extract what the user wants to hear: artist, song, album, radio, chart, or playlist. The target must be the clean music search query, not the full sentence.
         - Music examples:
@@ -116,7 +121,7 @@ final class AICommandManager {
         - Preserve stylized artist and song names. If the transcript sounds like "label c5", "level c5", "lvbel c5", "el ve bel c5", or "love bell c5" in a music command, normalize it to "lvbelc5"; do not replace it with the English word "level" or "label".
         - Respond in the same language as the user's command.
         - If you have a guessed action but are unsure, you can output the guessed action but set "needs_confirmation": true. If doing this, phrase your summary as a question (e.g. "Do you want to open GitHub?").
-        - \(defaultMusicContext)
+        - \(defaultMusicContext)\(clipboardContext)
         """
     }
 
@@ -200,7 +205,7 @@ final class AICommandManager {
     }
 
     /// Stop listening and process the transcript (push-to-talk release).
-    func processCommand(providerName: String, defaultMusicApp: String, cacheEnabled: Bool, playSounds: Bool, voiceFeedback: Bool) async {
+    func processCommand(providerName: String, defaultMusicApp: String, clipboardText: String?, visionModel: String, cacheEnabled: Bool, playSounds: Bool, voiceFeedback: Bool) async {
         guard phase == .listening else { return }
 
         if playSounds {
@@ -286,20 +291,50 @@ final class AICommandManager {
             }
         }
 
-        // No cache hit — send to LLM
+        // 2. Generate initial command
         let provider = activeProvider(named: providerName)
-
+        
         do {
             let response = try await provider.generate(
                 prompt: promptText,
-                systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp)
+                systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText),
+                image: nil,
+                overrideModel: nil
             )
 
-            lastResponse = response
+            var parsedCommand = ParsedCommand.parse(from: response.text)
 
-            // Parse the JSON command
-            if let command = ParsedCommand.parse(from: response.text) {
+            // 3. Handle Screen Awareness (Vision) Round 2
+            if parsedCommand?.action == "take_screenshot" {
+                setPhase(.processing, message: "Taking screenshot...")
+                
+                if let screenshotData = takeScreenshot() {
+                    setPhase(.processing, message: "Analyzing screen...")
+                    
+                    // Call the LLM again but using the vision model and the screenshot
+                    let visionResponse = try await provider.generate(
+                        prompt: "User's original request: '\(promptText)'. Look at this screenshot and fulfill their request.",
+                        systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText),
+                        image: screenshotData,
+                        overrideModel: visionModel
+                    )
+                    
+                    parsedCommand = ParsedCommand.parse(from: visionResponse.text)
+                } else {
+                    parsedCommand = ParsedCommand(
+                        action: "answer",
+                        target: nil,
+                        script: nil,
+                        confidence: 1.0,
+                        summary: "Could not take screenshot. Please ensure Screen Recording permissions are granted in System Settings.",
+                        needs_confirmation: false
+                    )
+                }
+            }
+
+            if let command = parsedCommand {
                 lastCommand = command
+                lastResponse = response
 
                 // Cache the result
                 let shouldBypassCache = isMusicSearchIntent(transcript.lowercased(with: Locale(identifier: "tr_TR")))
@@ -770,5 +805,18 @@ final class AICommandManager {
     private func truncate(_ text: String, to length: Int) -> String {
         if text.count <= length { return text }
         return String(text.prefix(length)) + "…"
+    }
+
+    private func takeScreenshot() -> Data? {
+        let path = NSTemporaryDirectory() + "notchagent_screenshot.jpg"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-t", "jpg", path]
+        try? process.run()
+        process.waitUntilExit()
+        
+        let data = try? Data(contentsOf: URL(fileURLWithPath: path))
+        try? FileManager.default.removeItem(atPath: path)
+        return data
     }
 }

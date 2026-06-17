@@ -54,7 +54,7 @@ final class OpenAIProvider: LLMProvider, @unchecked Sendable {
         !apiKey.isEmpty
     }
 
-    func generate(prompt: String, systemPrompt: String?) async throws -> LLMResponse {
+    func generate(prompt: String, systemPrompt: String?, image: Data?, overrideModel: String?) async throws -> LLMResponse {
         guard !apiKey.isEmpty else {
             throw LLMError.providerUnavailable(name)
         }
@@ -64,15 +64,26 @@ final class OpenAIProvider: LLMProvider, @unchecked Sendable {
         }
 
         let startTime = CFAbsoluteTimeGetCurrent()
+        let targetModel = overrideModel ?? model
 
-        var messages: [[String: String]] = []
+        var messages: [[String: Any]] = []
         if let systemPrompt {
             messages.append(["role": "system", "content": systemPrompt])
         }
-        messages.append(["role": "user", "content": prompt])
+        
+        if let image {
+            let base64 = image.base64EncodedString()
+            let contentArray: [[String: Any]] = [
+                ["type": "text", "text": prompt],
+                ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(base64)"]]
+            ]
+            messages.append(["role": "user", "content": contentArray])
+        } else {
+            messages.append(["role": "user", "content": prompt])
+        }
 
         let body: [String: Any] = [
-            "model": model,
+            "model": targetModel,
             "messages": messages,
             "temperature": 0.3,
             "max_tokens": 256
@@ -115,7 +126,7 @@ final class OpenAIProvider: LLMProvider, @unchecked Sendable {
 
         return LLMResponse(
             text: content.trimmingCharacters(in: .whitespacesAndNewlines),
-            model: model,
+            model: targetModel,
             provider: name,
             latencyMs: latencyMs
         )

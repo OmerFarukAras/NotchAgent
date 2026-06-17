@@ -25,8 +25,10 @@ protocol LLMProvider: Sendable {
     /// - Parameters:
     ///   - prompt: The user's intent or transcribed command.
     ///   - systemPrompt: Optional system-level instruction for the model.
+    ///   - image: Optional screenshot or image data to process (for Vision models).
+    ///   - overrideModel: Optional specific model name to use instead of the default.
     /// - Returns: A parsed `LLMResponse`.
-    func generate(prompt: String, systemPrompt: String?) async throws -> LLMResponse
+    func generate(prompt: String, systemPrompt: String?, image: Data?, overrideModel: String?) async throws -> LLMResponse
 }
 
 // MARK: - Response

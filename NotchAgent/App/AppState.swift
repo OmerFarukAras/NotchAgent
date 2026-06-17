@@ -108,6 +108,7 @@ final class AppState {
 
     var agentStatusMessage = "Ready for a quick command"
     var agentInputLevel: Double = 0
+    var currentClipboardText: String?
 
     // MARK: - Agent AI Pipeline
 
@@ -130,6 +131,10 @@ final class AppState {
 
     var ollamaModel: String = UserDefaults.standard.string(forKey: "ollamaModel") ?? "qwen2.5:3b" {
         didSet { UserDefaults.standard.set(ollamaModel, forKey: "ollamaModel") }
+    }
+
+    var ollamaVisionModel: String = UserDefaults.standard.string(forKey: "ollamaVisionModel") ?? "llava" {
+        didSet { UserDefaults.standard.set(ollamaVisionModel, forKey: "ollamaVisionModel") }
     }
 
     var ollamaIsAvailable = false

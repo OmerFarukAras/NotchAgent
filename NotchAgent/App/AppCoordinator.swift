@@ -17,6 +17,7 @@ final class AppCoordinator {
     let appState: AppState
     let notchViewModel: NotchViewModel
     let aiManager: AICommandManager
+    let clipboardMonitor: ClipboardMonitor
 
     private let notchWindowController: NotchWindowController
     private var shortcutRef: EventHotKeyRef?
@@ -26,14 +27,18 @@ final class AppCoordinator {
         let appState = AppState()
         let viewModel = NotchViewModel(appState: appState)
         let manager = AICommandManager()
+        let clipboardMonitor = ClipboardMonitor(appState: appState)
 
         self.appState = appState
         self.notchViewModel = viewModel
         self.aiManager = manager
+        self.clipboardMonitor = clipboardMonitor
         self.notchWindowController = NotchWindowController(
             appState: appState,
             viewModel: viewModel
         )
+        
+        clipboardMonitor.start()
 
         // Wire AICommandManager callbacks → AppState
         manager.onPhaseChange = { [weak appState, weak viewModel] phase, message in
@@ -240,6 +245,8 @@ final class AppCoordinator {
             await self.aiManager.processCommand(
                 providerName: self.appState.selectedProvider,
                 defaultMusicApp: self.appState.selectedMusicProvider,
+                clipboardText: self.appState.currentClipboardText,
+                visionModel: self.appState.ollamaVisionModel,
                 cacheEnabled: self.appState.cacheEnabled,
                 playSounds: self.appState.agentPlaySounds,
                 voiceFeedback: self.appState.agentVoiceFeedback
