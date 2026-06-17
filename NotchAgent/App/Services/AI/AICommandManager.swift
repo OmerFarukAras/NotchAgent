@@ -7,6 +7,8 @@
 
 import Foundation
 import AppKit
+import CoreGraphics
+import ScreenCaptureKit
 
 /// Orchestrates the full AI command pipeline:
 ///
@@ -125,6 +127,34 @@ final class AICommandManager {
         
         User Memory / Context:
         \(recentFacts.map { "- \($0.content)" }.joined(separator: "\n"))
+        """
+    }
+
+    private func buildVisionSystemPrompt(defaultMusicApp: String, clipboardText: String?, recentFacts: [Fact]) -> String {
+        """
+        You are a macOS desktop assistant with screenshot vision.
+        Answer the user's request from the screenshot quickly and concretely.
+        Return ONLY a JSON object or JSON array using this format:
+        {
+          "action": "answer",
+          "target": null,
+          "script": null,
+          "confidence": 0.95,
+          "summary": "Your concise answer",
+          "needs_confirmation": false
+        }
+
+        Rules:
+        - Use the same language as the user's command.
+        - If the user teaches you something visually, such as "this is me" or "bu benim", acknowledge it briefly.
+        - Use memory facts below as user-provided context. If a visible person appears to match a user-taught visual memory, say "this looks like you" rather than claiming certainty.
+        - Keep "summary" under 120 characters unless the user explicitly asks for a longer explanation.
+        - Do not execute actions from screenshots unless the user clearly asked for an action.
+        - The default music provider is \(defaultMusicApp.isEmpty ? "not set" : defaultMusicApp).
+        \(clipboardText.map { "- Clipboard: \"\($0)\"" } ?? "")
+
+        User Memory / Context:
+        \(recentFacts.map { "- [\($0.category)] \($0.content)" }.joined(separator: "\n"))
         """
     }
 
@@ -250,12 +280,15 @@ final class AICommandManager {
             """
             pendingCommand = nil
         } else {
-            let shouldBypassCache = isMusicSearchIntent(transcript.lowercased(with: Locale(identifier: "tr_TR")))
+            let shouldBypassCache = shouldBypassCommandCache(for: transcript)
+            if shouldBypassCache {
+                MemoryManager.shared.removeCachedCommand(intent: transcript)
+            }
 
             if let localCommand = localCommand(for: transcript) {
                 let plan = CommandPlan(steps: [localCommand])
                 lastPlan = plan
-                if cacheEnabled {
+                if cacheEnabled && shouldCacheCommand(localCommand, for: transcript, usedScreenContext: false) {
                     MemoryManager.shared.cacheCommand(
                         intent: transcript,
                         response: LLMResponse(
@@ -308,6 +341,58 @@ final class AICommandManager {
         let recentFacts = MemoryManager.shared.fetchRecentFacts()
         
         do {
+            if pendingCommand == nil, isScreenAwarenessIntent(transcript.lowercased(with: Locale(identifier: "tr_TR"))) {
+                setPhase(.processing, message: "Taking screenshot...")
+
+                guard let screenshotData = await takeScreenshot() else {
+                    let command = ParsedCommand(
+                        action: "answer",
+                        target: nil,
+                        script: nil,
+                        confidence: 1.0,
+                        summary: "Screen Recording permission is needed. If you just enabled it, restart NotchAgent.",
+                        needs_confirmation: false
+                    )
+                    let plan = CommandPlan(steps: [command])
+                    lastPlan = plan
+                    lastResponse = nil
+                    setPhase(.done, message: command.summary ?? "Permission needed")
+                    if playSounds { SoundEffectPlayer.play(.error) }
+                    if voiceFeedback { speechSynthesizer.speak(command.summary ?? "Permission needed") }
+                    onPlanReady?(plan, false)
+                    return
+                }
+
+                setPhase(.processing, message: "Analyzing screen...")
+                let visionResponse = try await provider.generate(
+                    prompt: "User request: '\(promptText)'. Answer using the screenshot. Be concise, direct, and use the user's language.",
+                    systemPrompt: buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
+                    image: screenshotData,
+                    overrideModel: visionModel
+                )
+
+                let plan = planFromVisionResponse(visionResponse)
+                lastPlan = plan
+                lastResponse = visionResponse
+
+                let summary = plan.steps.first?.summary ?? "Done"
+                setPhase(.done, message: summary)
+                if playSounds { SoundEffectPlayer.play(.success) }
+                if voiceFeedback { speechSynthesizer.speak(summary) }
+                onPlanReady?(plan, false)
+
+                extractAndSaveVisualFacts(
+                    from: transcript,
+                    screenshotData: screenshotData,
+                    defaultMusicApp: defaultMusicApp,
+                    clipboardText: clipboardText,
+                    recentFacts: recentFacts,
+                    provider: provider,
+                    visionModel: visionModel
+                )
+                return
+            }
+
             let response = try await provider.generate(
                 prompt: promptText,
                 systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
@@ -316,23 +401,34 @@ final class AICommandManager {
             )
 
             var plan = CommandPlan.parse(from: response.text)
+            var usedScreenContext = false
 
             // 3. Handle Screen Awareness (Vision) Round 2
             if plan?.steps.first?.action == "take_screenshot" {
+                usedScreenContext = true
                 setPhase(.processing, message: "Taking screenshot...")
                 
-                if let screenshotData = takeScreenshot() {
+                if let screenshotData = await takeScreenshot() {
                     setPhase(.processing, message: "Analyzing screen...")
                     
                     // Call the LLM again but using the vision model and the screenshot
                     let visionResponse = try await provider.generate(
                         prompt: "User's original request: '\(promptText)'. Look at this screenshot and fulfill their request.",
-                        systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
+                        systemPrompt: buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
                         image: screenshotData,
                         overrideModel: visionModel
                     )
                     
-                    plan = CommandPlan.parse(from: visionResponse.text)
+                    plan = planFromVisionResponse(visionResponse)
+                    extractAndSaveVisualFacts(
+                        from: transcript,
+                        screenshotData: screenshotData,
+                        defaultMusicApp: defaultMusicApp,
+                        clipboardText: clipboardText,
+                        recentFacts: recentFacts,
+                        provider: provider,
+                        visionModel: visionModel
+                    )
                 } else {
                     plan = CommandPlan(steps: [
                         ParsedCommand(
@@ -340,7 +436,7 @@ final class AICommandManager {
                             target: nil,
                             script: nil,
                             confidence: 1.0,
-                            summary: "Could not take screenshot. Please ensure Screen Recording permissions are granted in System Settings.",
+                            summary: "Screen Recording permission is needed. If you just enabled it, restart NotchAgent.",
                             needs_confirmation: false
                         )
                     ])
@@ -352,9 +448,12 @@ final class AICommandManager {
                 lastResponse = response
 
                 // Cache the result (caching first command only for backward compatibility, or update cache model later)
-                let shouldBypassCache = isMusicSearchIntent(transcript.lowercased(with: Locale(identifier: "tr_TR")))
-                if cacheEnabled && !shouldBypassCache {
-                    MemoryManager.shared.cacheCommand(intent: transcript, response: response, command: finalPlan.steps.first!)
+                let shouldBypassCache = shouldBypassCommandCache(for: transcript) || usedScreenContext
+                if let firstCommand = finalPlan.steps.first,
+                   cacheEnabled,
+                   !shouldBypassCache,
+                   shouldCacheCommand(firstCommand, for: transcript, usedScreenContext: usedScreenContext) {
+                    MemoryManager.shared.cacheCommand(intent: transcript, response: response, command: firstCommand)
                 }
 
                 let summary = finalPlan.steps.first?.summary ?? "Done"
@@ -394,6 +493,49 @@ final class AICommandManager {
                 }
             } catch {
                 print("Fact extraction failed: \(error)")
+            }
+        }
+    }
+
+    private func extractAndSaveVisualFacts(
+        from transcript: String,
+        screenshotData: Data,
+        defaultMusicApp: String,
+        clipboardText: String?,
+        recentFacts: [Fact],
+        provider: LLMProvider,
+        visionModel: String
+    ) {
+        guard shouldExtractVisualFact(from: transcript) else { return }
+
+        Task {
+            let prompt = """
+            The user just referred to this screenshot with: "\(transcript)".
+            If they taught a stable visual fact or identity cue, return ONLY JSON:
+            {"action":"save_fact","target":"Visual","script":"short durable fact to remember","confidence":0.9,"summary":"Saved","needs_confirmation":false}
+            Otherwise return:
+            {"action":"unknown","target":null,"script":null,"confidence":0.0,"summary":"Nothing to save","needs_confirmation":false}
+
+            Save only durable, user-provided facts. For "this is me" / "bu benim", describe the visible person as a user-taught visual identity cue without claiming biometric certainty.
+            """
+
+            do {
+                let response = try await provider.generate(
+                    prompt: prompt,
+                    systemPrompt: buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
+                    image: screenshotData,
+                    overrideModel: visionModel
+                )
+
+                if let plan = CommandPlan.parse(from: response.text),
+                   let command = plan.steps.first,
+                   command.action == "save_fact",
+                   let fact = command.script,
+                   !fact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    MemoryManager.shared.addFact(content: fact, category: command.target ?? "Visual")
+                }
+            } catch {
+                print("Visual fact extraction failed: \(error)")
             }
         }
     }
@@ -748,6 +890,90 @@ final class AICommandManager {
         return true
     }
 
+    private func shouldBypassCommandCache(for transcript: String) -> Bool {
+        let lowercased = transcript.lowercased(with: Locale(identifier: "tr_TR"))
+        return isMusicSearchIntent(lowercased)
+            || isScreenAwarenessIntent(lowercased)
+            || containsDynamicAnswerIntent(lowercased)
+    }
+
+    private func shouldCacheCommand(_ command: ParsedCommand, for transcript: String, usedScreenContext: Bool) -> Bool {
+        guard !usedScreenContext,
+              command.needs_confirmation != true,
+              let action = command.action else {
+            return false
+        }
+
+        let lowercased = transcript.lowercased(with: Locale(identifier: "tr_TR"))
+        guard !containsDynamicAnswerIntent(lowercased), !isScreenAwarenessIntent(lowercased) else {
+            return false
+        }
+
+        let cacheableActions = Set([
+            "open_app",
+            "open_url",
+            "open_urls",
+            "volume_control",
+            "brightness_control",
+            "change_setting"
+        ])
+
+        return cacheableActions.contains(action)
+    }
+
+    private func containsDynamicAnswerIntent(_ lowercased: String) -> Bool {
+        let dynamicWords = [
+            "what", "why", "how", "when", "where", "who",
+            "ne", "neden", "nasıl", "nasil", "niye", "kim", "hangi",
+            "bugün", "bugun", "şimdi", "simdi", "currently", "latest",
+            "açıkla", "acikla", "özetle", "ozetle", "anlat", "yorumla",
+            "answer", "explain", "summarize", "describe"
+        ]
+
+        return dynamicWords.contains { lowercased.contains($0) }
+    }
+
+    private func isScreenAwarenessIntent(_ lowercased: String) -> Bool {
+        let screenWords = [
+            "screen", "screenshot", "display", "monitor", "what am i looking at",
+            "what is on my screen", "what's on my screen", "look at this",
+            "ekran", "ekranım", "ekranim", "ekrandaki", "ekranda",
+            "buradaki", "burda", "burada", "bunu", "şunu", "sunu",
+            "gördüğüm", "gordugum", "ne var", "ne görüyorsun", "ne goruyorsun"
+        ]
+
+        return screenWords.contains { lowercased.contains($0) }
+    }
+
+    private func shouldExtractVisualFact(from transcript: String) -> Bool {
+        let lowercased = transcript.lowercased(with: Locale(identifier: "tr_TR"))
+        let teachingPhrases = [
+            "bu benim", "bu ben", "beni tanı", "beni tani", "bunu hatırla",
+            "bunu hatirla", "aklında tut", "aklinda tut", "remember this",
+            "this is me", "that's me", "that is me", "remember me",
+            "recognize me", "learn this"
+        ]
+
+        return teachingPhrases.contains { lowercased.contains($0) }
+    }
+
+    private func planFromVisionResponse(_ response: LLMResponse) -> CommandPlan {
+        if let plan = CommandPlan.parse(from: response.text), !plan.steps.isEmpty {
+            return plan
+        }
+
+        return CommandPlan(steps: [
+            ParsedCommand(
+                action: "answer",
+                target: nil,
+                script: nil,
+                confidence: 0.8,
+                summary: truncate(response.text, to: 120),
+                needs_confirmation: false
+            )
+        ])
+    }
+
     private func normalizeKnownMusicNames(_ query: String) -> String {
         var normalized = query
         let knownReplacements: [(String, String)] = [
@@ -867,16 +1093,31 @@ final class AICommandManager {
         return String(text.prefix(length)) + "…"
     }
 
-    private func takeScreenshot() -> Data? {
-        let path = NSTemporaryDirectory() + "notchagent_screenshot.jpg"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        process.arguments = ["-x", "-t", "jpg", path]
-        try? process.run()
-        process.waitUntilExit()
-        
-        let data = try? Data(contentsOf: URL(fileURLWithPath: path))
-        try? FileManager.default.removeItem(atPath: path)
-        return data
+    private func takeScreenshot() async -> Data? {
+        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+            return nil
+        }
+
+        do {
+            let content = try await SCShareableContent.current
+            let mainDisplayID = CGMainDisplayID()
+            guard let display = content.displays.first(where: { $0.displayID == mainDisplayID }) ?? content.displays.first else {
+                return nil
+            }
+
+            let filter = SCContentFilter(display: display, excludingWindows: [])
+            let configuration = SCStreamConfiguration()
+            let scale = NSScreen.screens
+                .first(where: { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == display.displayID })?
+                .backingScaleFactor ?? 1
+            configuration.width = Int(display.width) * Int(scale)
+            configuration.height = Int(display.height) * Int(scale)
+
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.82])
+        } catch {
+            return nil
+        }
     }
 }

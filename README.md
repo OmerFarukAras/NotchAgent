@@ -16,6 +16,13 @@ NotchAgent is a local-first macOS notch companion that turns the top-center scre
 
 The project is an evolving SwiftUI application. It currently features a dynamic notch window shell, multiple widget surfaces (Settings, Calendar, Camera Mirror, Music), and a fully functional AI Command Pipeline with voice recognition (Push-to-Talk) backed by local Ollama models or OpenAI.
 
+## What's New in v1.2.1
+
+- **Screen Awareness Hotfix:** Replaced the legacy screenshot command path with native ScreenCaptureKit capture so macOS Screen Recording permission is checked against NotchAgent directly.
+- **Faster Vision Flow:** Screen-related commands now skip the initial planning round and go straight to screenshot analysis.
+- **Visual Memory:** Teaching prompts such as "this is me" / "bu benim" can save durable visual context for future screen-aware answers.
+- **Safer Command Cache:** Dynamic answers, screen analysis, music requests, and explanatory prompts no longer get cached as stale repeated responses.
+
 ## What's New in v1.2.0
 
 - **Multi-step AI Command Execution:** The AI can now plan and execute multiple tasks in sequence (e.g., "Open Safari and type 'macOS tips'"). Includes fault tolerance that safely halts execution if a step fails.

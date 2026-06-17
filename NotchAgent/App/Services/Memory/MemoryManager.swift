@@ -90,6 +90,22 @@ final class MemoryManager {
         }
     }
 
+    func removeCachedCommand(intent: String) {
+        guard let context = modelContext else { return }
+
+        let normalized = normalize(intent)
+        let fetchDescriptor = FetchDescriptor<CachedCommand>(predicate: #Predicate { $0.intent == normalized })
+
+        do {
+            for entry in try context.fetch(fetchDescriptor) {
+                context.delete(entry)
+            }
+            try context.save()
+        } catch {
+            print("Error removing cached command: \(error)")
+        }
+    }
+
     func cacheCommand(intent: String, response: LLMResponse, command: ParsedCommand?) {
         guard let context = modelContext else { return }
         
