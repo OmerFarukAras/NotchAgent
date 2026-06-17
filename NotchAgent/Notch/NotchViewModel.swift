@@ -173,7 +173,6 @@ final class NotchViewModel {
                 // Close this surface, stay expanded
                 appState.activeSurface = .none
                 appState.isSurfaceExpanded = false
-                stopSpotifyRefresh()
             } else {
                 appState.isSurfaceExpanded = true
             }
@@ -184,9 +183,6 @@ final class NotchViewModel {
             appState.isSurfaceExpanded = false
             if surface == .spotify {
                 refreshSpotifyState()
-                startSpotifyRefresh()
-            } else {
-                stopSpotifyRefresh()
             }
         }
     }
@@ -205,7 +201,6 @@ final class NotchViewModel {
         appState.isNotchExpanded = false
         appState.isSurfaceExpanded = false
         appState.notchState = .idle
-        stopSpotifyRefresh()
     }
 
     func runDemoFlow() {
