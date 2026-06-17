@@ -8,7 +8,15 @@
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    var coordinator: AppCoordinator?
+    var coordinator: AppCoordinator? {
+        didSet {
+            guard pendingListenRequest else { return }
+            pendingListenRequest = false
+            coordinator?.activateAgentListening()
+        }
+    }
+
+    private var pendingListenRequest = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleGetURLEvent(event:withReplyEvent:)), forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
@@ -16,24 +24,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func handleGetURLEvent(event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
         if let urlString = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
-           let url = URL(string: urlString), url.host == "listen" {
-            coordinator?.activateAgentListening()
+           shouldOpenListening(for: urlString) {
+            if let coordinator {
+                coordinator.activateAgentListening()
+            } else {
+                pendingListenRequest = true
+            }
         }
+    }
+
+    private func shouldOpenListening(for urlString: String) -> Bool {
+        guard let url = URL(string: urlString),
+              url.scheme?.lowercased() == "notchagent"
+        else { return false }
+
+        let command = url.host ?? url.path
+        return command.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() == "listen"
     }
 }
 
 @main
 struct NotchAgentApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var coordinator = AppCoordinator()
+    @State private var coordinator: AppCoordinator
+
+    init() {
+        let coordinator = AppCoordinator()
+        _coordinator = State(initialValue: coordinator)
+        appDelegate.coordinator = coordinator
+    }
 
     var body: some Scene {
         MenuBarExtra("NotchAgent", systemImage: "sparkles") {
             Button("Run Demo Flow") {
                 coordinator.notchViewModel.runDemoFlow()
-            }
-            .onAppear {
-                appDelegate.coordinator = coordinator
             }
 
             if coordinator.appState.isUpdateAvailable {
