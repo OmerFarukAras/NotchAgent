@@ -58,7 +58,7 @@ The project is an evolving SwiftUI application. It currently features a dynamic 
 
 ## Requirements
 
-- macOS 14.0+
+- macOS 15.0+
 - Xcode 15+
 - SwiftUI / AppKit-capable macOS target
 
