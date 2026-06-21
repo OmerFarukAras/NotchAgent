@@ -16,9 +16,8 @@ struct ListenIntent: AppIntent {
     
     @MainActor
     func perform() async throws -> some IntentResult {
-        if let url = URL(string: "notchagent://listen") {
-            NSWorkspace.shared.open(url)
-        }
+        NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: NSNotification.Name("NotchAgentStartListening"), object: nil)
         return .result()
     }
 }

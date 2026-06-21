@@ -325,7 +325,7 @@ final class NotchViewModel {
             // Apple Music does not support play track URL via AppleScript natively without library matching.
             // Best effort is opening the search page.
             if let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-               let url = URL(string: "musics://search?term=\(encodedQuery)") {
+               let url = URL(string: "music://music.apple.com/search?term=\(encodedQuery)") {
                 NSWorkspace.shared.open(url)
                 appState.notchState = .result
                 appState.agentStatusMessage = "Opened search in Apple Music"

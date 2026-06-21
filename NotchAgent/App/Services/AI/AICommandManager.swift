@@ -29,6 +29,7 @@ final class AICommandManager {
     private let speechRecognizer = SpeechRecognizer()
     private let speechSynthesizer = SpeechSynthesizer()
     private let cacheEnabledKey = "notchagent.cacheEnabled"
+    private let commandExecutor = CommandExecutor()
 
     private var ollamaProvider: OllamaProvider
     private var openAIProvider: OpenAIProvider
@@ -68,96 +69,6 @@ final class AICommandManager {
 
     // MARK: - System Prompt
 
-    private func buildSystemPrompt(defaultMusicApp: String, clipboardText: String?, recentFacts: [Fact]) -> String {
-        let defaultMusicContext = defaultMusicApp.isEmpty
-            ? "The default music provider is not set. If the user asks to play music, ask them what app they want to use by returning action: 'ask_clarification', summary: 'What is your default music app?'"
-            : "The user's default music provider is \(defaultMusicApp). If they ask to play music without specifying an app, use this default. To change their default music app to X, output action: 'change_setting', target: 'default_music_app', script: 'X'."
-            
-        let clipboardContext = clipboardText != nil 
-            ? "\n- The user's clipboard currently contains: \"\(clipboardText!)\". If the user asks you to summarize, rewrite, or explain without specifying what, they are likely referring to this text. Use the 'answer' action or 'type_text' action depending on context." 
-            : ""
-
-        return """
-        You are a macOS desktop assistant embedded in a notch UI. The user gives voice commands.
-        You MUST respond with ONLY a JSON object or a JSON array of objects in this exact format. If you need to perform multiple distinct actions, return an array of objects.
-        For a single action, you can just return the object:
-        {
-          "action": "action_type",
-          "target": "target_name_or_null",
-          "script": "applescript_code_or_null",
-          "confidence": 0.95,
-          "summary": "Brief description of what you're doing",
-          "needs_confirmation": false
-        }
-
-        Available actions:
-        - "open_app": Open an application. Set "target" to the app name.
-        - "open_url": Open a website. Set "target" to the URL (e.g. "https://github.com").
-        - "open_urls": Open multiple websites in a browser. Set "target" to the browser app name (e.g. "Safari", "Google Chrome") and set "script" to one URL per line (e.g. "https://youtube.com\nhttps://github.com"). Use this for commands like "open Safari with YouTube and GitHub".
-        - "music_control": Control music playback. Set "target" to "play", "pause", "next", "previous", "shuffle", "repeat".
-        - "search_music": Search and play a specific song, artist, album, radio, chart, or playlist. Set "target" to the exact search query (e.g. "lvbelc5", "Motive", "Motive radio", "Motive Top 50", "araba musics piyasa"). If the user explicitly says Spotify, prefix the target with "spotify::"; if they explicitly say Apple Music, prefix it with "applemusic::".
-        - "type_text": Dictate, paste, or type text into the currently active application. Set "script" to the exact text you want to type. Format it perfectly (e.g. if the user dictates code, format it as code).
-        - "system_command": Run a system command. Set "script" to the AppleScript code.
-        - "volume_control": Adjust system volume. Set "target" to "up", "down", "mute", or a number 0-100.
-        - "brightness_control": Adjust screen brightness. Set "target" to "up", "down", or a number 0-100.
-        - "web_search": Search the web. Set "target" to the search query.
-        - "answer": Just answer a question. Set "summary" to the answer. No script needed.
-        - "change_setting": Change a user setting. Set "target" to the setting name (e.g. "default_music_app") and "script" to the value.
-        - "ask_clarification": If the command is too ambiguous, ask the user. Put your question in "summary".
-        - "take_screenshot": If the user asks about the screen, what they are looking at, or uses words like 'buradaki', 'ekrandaki', 'bunu', output action: 'take_screenshot'. The system will take a screenshot and pass it back to you.
-        - "unknown": You don't understand the command.
-
-        Rules:
-        - ONLY output the JSON object, nothing else.
-        - Keep "summary" short (under 60 characters).
-        - For AppleScript, use "tell application" syntax. You MUST escape inner quotes using backslashes (e.g. "tell application \"Safari\"").
-        - Handle mixed language input robustly (e.g. Turkish and English). The speech-to-text system may misspell English app names phonetically (e.g. "kodex" -> "Codex", "anti graviti" -> "Anti Gravity"). You MUST correct these misspellings before executing the command.
-        - Treat Turkish and English music commands as semantic search_music requests, not literal app-opening requests. Extract what the user wants to hear: artist, song, album, radio, chart, or playlist. The target must be the clean music search query, not the full sentence.
-        - Music examples:
-          - "Spotify'da Motive aç" -> action: "search_music", target: "spotify::Motive"
-          - "Motive radyosu aç" -> action: "search_music", target: "Motive radio"
-          - "Motive'yi Top 50 aç" -> action: "search_music", target: "Motive Top 50"
-          - "Top 50 playlistini aç" -> action: "search_music", target: "Top 50 playlist"
-          - "play Motive radio on Spotify" -> action: "search_music", target: "spotify::Motive radio"
-          - "Apple Music'te Sezen Aksu çal" -> action: "search_music", target: "applemusic::Sezen Aksu"
-        - Preserve stylized artist and song names. If the transcript sounds like "label c5", "level c5", "lvbel c5", "el ve bel c5", or "love bell c5" in a music command, normalize it to "lvbelc5"; do not replace it with the English word "level" or "label".
-        - Respond in the same language as the user's command.
-        - If you have a guessed action but are unsure, you can output the guessed action but set "needs_confirmation": true. If doing this, phrase your summary as a question (e.g. "Do you want to open GitHub?").
-        - \(defaultMusicContext)\(clipboardContext)
-        
-        User Memory / Context:
-        \(recentFacts.map { "- \($0.content)" }.joined(separator: "\n"))
-        """
-    }
-
-    private func buildVisionSystemPrompt(defaultMusicApp: String, clipboardText: String?, recentFacts: [Fact]) -> String {
-        """
-        You are a macOS desktop assistant with screenshot vision.
-        Answer the user's request from the screenshot quickly and concretely.
-        Return ONLY a JSON object or JSON array using this format:
-        {
-          "action": "answer",
-          "target": null,
-          "script": null,
-          "confidence": 0.95,
-          "summary": "Your concise answer",
-          "needs_confirmation": false
-        }
-
-        Rules:
-        - Use the same language as the user's command.
-        - If the user teaches you something visually, such as "this is me" or "bu benim", acknowledge it briefly.
-        - Use memory facts below as user-provided context. If a visible person appears to match a user-taught visual memory, say "this looks like you" rather than claiming certainty.
-        - Keep "summary" under 120 characters unless the user explicitly asks for a longer explanation.
-        - Do not execute actions from screenshots unless the user clearly asked for an action.
-        - The default music provider is \(defaultMusicApp.isEmpty ? "not set" : defaultMusicApp).
-        \(clipboardText.map { "- Clipboard: \"\($0)\"" } ?? "")
-
-        User Memory / Context:
-        \(recentFacts.map { "- [\($0.category)] \($0.content)" }.joined(separator: "\n"))
-        """
-    }
-
     // MARK: - Init
 
     init() {
@@ -176,6 +87,28 @@ final class AICommandManager {
 
         speechRecognizer.onSilenceDetected = { [weak self] in
             self?.onSilenceDetected?()
+        }
+
+        commandExecutor.onPhaseChange = { [weak self] phase, msg in
+            self?.setPhase(phase, message: msg)
+        }
+        commandExecutor.onMusicControl = { [weak self] action in
+            self?.onMusicControl?(action)
+        }
+        commandExecutor.onMusicSearch = { [weak self] query in
+            self?.onMusicSearch?(query)
+        }
+        commandExecutor.onSettingChange = { [weak self] setting, value in
+            self?.onSettingChange?(setting, value)
+        }
+        commandExecutor.onPendingCommand = { [weak self] command in
+            self?.pendingCommand = command
+        }
+        commandExecutor.onBackgroundResearchSummarize = { [weak self] query, rawText in
+            guard let self = self else { return rawText }
+            let prompt = "Kullanıcı şu konuyu araştırmak istedi: '\\(query)'. Bulunan ham veriler şunlar:\\n\\n\\(rawText)\\n\\nLütfen bu verileri okuyarak kullanıcıya kısa, öz ve konuşma dilinde bir özet yaz."
+            let response = try await self.ollamaProvider.generate(prompt: prompt, systemPrompt: "Sen yardımsever bir asistansın. Sadece istenen özeti ver.", image: nil, overrideModel: nil)
+            return response.text
         }
     }
 
@@ -285,7 +218,7 @@ final class AICommandManager {
                 MemoryManager.shared.removeCachedCommand(intent: transcript)
             }
 
-            if let localCommand = localCommand(for: transcript) {
+            if let localCommand = CommandParser.localCommand(for: transcript) {
                 let plan = CommandPlan(steps: [localCommand])
                 lastPlan = plan
                 if cacheEnabled && shouldCacheCommand(localCommand, for: transcript, usedScreenContext: false) {
@@ -338,7 +271,8 @@ final class AICommandManager {
 
         // 2. Generate initial command
         let provider = activeProvider(named: providerName)
-        let recentFacts = MemoryManager.shared.fetchRecentFacts()
+        let memoryFacts = await VectorMemoryService.shared.search(query: transcript)
+        let recentFacts = memoryFacts.map { $0.text }
         
         do {
             if pendingCommand == nil, isScreenAwarenessIntent(transcript.lowercased(with: Locale(identifier: "tr_TR"))) {
@@ -365,8 +299,8 @@ final class AICommandManager {
 
                 setPhase(.processing, message: "Analyzing screen...")
                 let visionResponse = try await provider.generate(
-                    prompt: "User request: '\(promptText)'. Answer using the screenshot. Be concise, direct, and use the user's language.",
-                    systemPrompt: buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
+                    prompt: "User request: '\(promptText)'. Use the screenshot to guide the user. YOU MUST ONLY OUTPUT VALID JSON. No other text.",
+                    systemPrompt: PromptBuilder.buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
                     image: screenshotData,
                     overrideModel: visionModel
                 )
@@ -395,7 +329,7 @@ final class AICommandManager {
 
             let response = try await provider.generate(
                 prompt: promptText,
-                systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
+                systemPrompt: PromptBuilder.buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
                 image: nil,
                 overrideModel: nil
             )
@@ -414,7 +348,7 @@ final class AICommandManager {
                     // Call the LLM again but using the vision model and the screenshot
                     let visionResponse = try await provider.generate(
                         prompt: "User's original request: '\(promptText)'. Look at this screenshot and fulfill their request.",
-                        systemPrompt: buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
+                        systemPrompt: PromptBuilder.buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
                         image: screenshotData,
                         overrideModel: visionModel
                     )
@@ -481,7 +415,7 @@ final class AICommandManager {
             do {
                 let response = try await provider.generate(
                     prompt: prompt,
-                    systemPrompt: buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: []),
+                    systemPrompt: PromptBuilder.buildSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: []),
                     image: nil,
                     overrideModel: nil
                 )
@@ -502,7 +436,7 @@ final class AICommandManager {
         screenshotData: Data,
         defaultMusicApp: String,
         clipboardText: String?,
-        recentFacts: [Fact],
+        recentFacts: [String],
         provider: LLMProvider,
         visionModel: String
     ) {
@@ -522,7 +456,7 @@ final class AICommandManager {
             do {
                 let response = try await provider.generate(
                     prompt: prompt,
-                    systemPrompt: buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
+                    systemPrompt: PromptBuilder.buildVisionSystemPrompt(defaultMusicApp: defaultMusicApp, clipboardText: clipboardText, recentFacts: recentFacts),
                     image: screenshotData,
                     overrideModel: visionModel
                 )
@@ -555,132 +489,7 @@ final class AICommandManager {
     // MARK: - Command Execution
 
     func executeCommandPlan(_ plan: CommandPlan) {
-        Task { @MainActor in
-            for command in plan.steps {
-                let success = executeSingleCommand(command)
-                if !success {
-                    // Halt execution if a step explicitly failed
-                    break
-                }
-                // Brief pause between sequential commands for stability
-                try? await Task.sleep(nanoseconds: 500_000_000)
-            }
-        }
-    }
-
-    /// Execute a parsed command's AppleScript, if it has one. Returns true if successful.
-    private func executeSingleCommand(_ command: ParsedCommand) -> Bool {
-        let summary = command.summary ?? "Done"
-        setPhase(.executing, message: "Running: \(summary)")
-
-        if command.action == "ask_clarification" {
-            setPhase(.done, message: summary)
-            return true
-        }
-
-        if command.needs_confirmation == true {
-            pendingCommand = command
-            setPhase(.done, message: summary)
-            return true
-        }
-
-        // Handle open_url natively
-        if command.action == "open_url", let urlString = command.target, let url = URL(string: urlString.hasPrefix("http") ? urlString : "https://\(urlString)") {
-            NSWorkspace.shared.open(url)
-            setPhase(.done, message: "✓ \(summary)")
-            return true
-        }
-
-        // Handle multi-tab browser opens natively.
-        if command.action == "open_urls",
-           let browserName = command.target,
-           let script = command.script {
-            let urls = script
-                .components(separatedBy: .newlines)
-                .compactMap { normalizedURLString(from: $0) }
-
-            guard !urls.isEmpty else {
-                setPhase(.error, message: "No URLs to open")
-                return false
-            }
-
-            openURLs(urls, inBrowser: browserName)
-            setPhase(.done, message: "✓ \(summary)")
-            return true
-        }
-
-        // Handle music_control natively
-        if command.action == "music_control" {
-            onMusicControl?(command.target ?? "playpause")
-            setPhase(.done, message: "✓ \(summary)")
-            return true
-        }
-
-        // Handle search_music natively
-        if command.action == "search_music" {
-            onMusicSearch?(command.target ?? "")
-            setPhase(.done, message: "✓ \(summary)")
-            return true
-        }
-
-        // Handle change_setting natively
-        if command.action == "change_setting", let setting = command.target, let value = command.script {
-            onSettingChange?(setting, value)
-            setPhase(.done, message: "✓ \(summary)")
-            return true
-        }
-
-        // Handle type_text natively
-        if command.action == "type_text", let text = command.script {
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-
-            let source = """
-            tell application "System Events"
-                keystroke "v" using command down
-            end tell
-            """
-            
-            var error: NSDictionary?
-            NSAppleScript(source: source)?.executeAndReturnError(&error)
-            
-            if error != nil {
-                setPhase(.error, message: "Needs Accessibility Permission")
-                return false
-            } else {
-                setPhase(.done, message: "✓ Typed Text")
-                return true
-            }
-        }
-
-        // Handle open_app natively to bypass AppleScript sandbox restrictions
-        if command.action == "open_app", let appName = command.target {
-            let success = NSWorkspace.shared.launchApplication(appName)
-            if success {
-                setPhase(.done, message: "✓ \(summary)")
-                return true
-            } else {
-                setPhase(.error, message: "Could not open \(appName)")
-                return false
-            }
-        }
-        
-        guard let script = command.script, !script.isEmpty else {
-            setPhase(.done, message: summary)
-            return true
-        }
-
-        var error: NSDictionary?
-        NSAppleScript(source: script)?.executeAndReturnError(&error)
-
-        if error != nil {
-            setPhase(.error, message: "Script execution failed")
-            return false
-        } else {
-            setPhase(.done, message: "✓ \(summary)")
-            return true
-        }
+        commandExecutor.executeCommandPlan(plan)
     }
 
     // MARK: - Health Check
@@ -712,187 +521,9 @@ final class AICommandManager {
         onPhaseChange?(phase, message)
     }
 
-    private func localCommand(for transcript: String) -> ParsedCommand? {
-        if let command = browserTabsCommand(for: transcript) {
-            return command
-        }
-
-        if shouldUseLocalMusicParser(for: transcript), let musicQuery = musicSearchQuery(from: transcript) {
-            return ParsedCommand(
-                action: "search_music",
-                target: musicQuery,
-                script: nil,
-                confidence: 0.92,
-                summary: "Playing \(musicQuery)",
-                needs_confirmation: false
-            )
-        }
-
-        return nil
-    }
-
-    private func shouldUseLocalMusicParser(for transcript: String) -> Bool {
-        let lowercased = transcript.lowercased(with: Locale(identifier: "tr_TR"))
-        let hasExplicitProvider = lowercased.contains("spotify") || lowercased.contains("apple music")
-        let hasKnownSpeechCorrection = [
-            "lvbel", "label c5", "labelc5", "level c5", "levelc5",
-            "love bell c5", "lovebel c5", "el ve bel c5",
-            "l v bel c5", "l v b l c 5"
-        ].contains { lowercased.contains($0) }
-
-        return hasExplicitProvider || hasKnownSpeechCorrection
-    }
-
-    private func browserTabsCommand(for transcript: String) -> ParsedCommand? {
-        let lowercased = transcript.lowercased()
-        guard lowercased.contains("open") || lowercased.contains("aç") else { return nil }
-
-        let browserAliases: [(alias: String, appName: String)] = [
-            ("safari", "Safari"),
-            ("chrome", "Google Chrome"),
-            ("google chrome", "Google Chrome"),
-            ("edge", "Microsoft Edge"),
-            ("firefox", "Firefox"),
-            ("arc", "Arc")
-        ]
-
-        guard let browser = browserAliases.first(where: { lowercased.contains($0.alias) }) else {
-            return nil
-        }
-
-        let separators = CharacterSet(charactersIn: ",+&")
-        let cleaned = lowercased
-            .replacingOccurrences(of: "open", with: " ")
-            .replacingOccurrences(of: "aç", with: " ")
-            .replacingOccurrences(of: browser.alias, with: " ")
-            .replacingOccurrences(of: "with", with: " ")
-            .replacingOccurrences(of: "and", with: ",")
-            .replacingOccurrences(of: "ile", with: " ")
-            .replacingOccurrences(of: "ve", with: ",")
-
-        let urls = cleaned
-            .components(separatedBy: separators)
-            .compactMap { normalizedURLString(from: $0) }
-
-        guard urls.count >= 2 else { return nil }
-
-        return ParsedCommand(
-            action: "open_urls",
-            target: browser.appName,
-            script: urls.joined(separator: "\n"),
-            confidence: 0.94,
-            summary: "Opening \(urls.count) tabs",
-            needs_confirmation: false
-        )
-    }
-
-    private func musicSearchQuery(from transcript: String) -> String? {
-        let lowercased = transcript.lowercased(with: Locale(identifier: "tr_TR"))
-        guard isMusicSearchIntent(lowercased) else { return nil }
-
-        let providerPrefix: String
-        if lowercased.contains("spotify") {
-            providerPrefix = "spotify::"
-        } else if lowercased.contains("apple music") || lowercased.contains("müzik uygulaması") || lowercased.contains("music uygulaması") {
-            providerPrefix = "applemusic::"
-        } else {
-            providerPrefix = ""
-        }
-
-        var query = lowercased
-        let replacements: [(String, String)] = [
-            ("spotify'da", " "),
-            ("spotify da", " "),
-            ("spotifyda", " "),
-            ("spotify", " "),
-            ("apple music'te", " "),
-            ("apple music te", " "),
-            ("apple musicte", " "),
-            ("apple music", " "),
-            ("müzik uygulamasında", " "),
-            ("music app", " "),
-            ("please", " "),
-            ("can you", " "),
-            ("could you", " "),
-            ("play", " "),
-            ("open", " "),
-            ("search", " "),
-            ("put on", " "),
-            ("açabilir misin", " "),
-            ("açarmısın", " "),
-            ("açar mısın", " "),
-            ("aç", " "),
-            ("çalabilir misin", " "),
-            ("çalarmısın", " "),
-            ("çalar mısın", " "),
-            ("çal", " "),
-            ("oynat", " "),
-            ("başlat", " "),
-            ("en iyi şarkılar", "best songs"),
-            ("en sevilen şarkılar", "best songs"),
-            ("popüler şarkılar", "popular songs"),
-            ("şarkısını", " "),
-            ("şarkısı", " "),
-            ("şarkı", " "),
-            ("parçasını", " "),
-            ("parça", " "),
-            ("playlistini", "playlist"),
-            ("playlist'i", "playlist"),
-            ("çalma listesini", "playlist"),
-            ("listesini", " "),
-            ("listesi", " "),
-            ("radyosunu", "radio"),
-            ("radyosu", "radio"),
-            ("radyo", "radio"),
-            (" radyoyu", " radio"),
-            ("yi ", " "),
-            ("yı ", " "),
-            ("yu ", " "),
-            ("yü ", " "),
-            ("'yi", " "),
-            ("'yı", " "),
-            ("'yu", " "),
-            ("'yü", " ")
-        ]
-
-        for (needle, replacement) in replacements {
-            query = query.replacingOccurrences(of: needle, with: replacement)
-        }
-
-        query = query
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        query = stripTurkishObjectSuffixes(from: query)
-        query = normalizeKnownMusicNames(query)
-
-        guard isUsefulMusicQuery(query) else { return nil }
-        return providerPrefix + titleCasedMusicQuery(query)
-    }
-
-    private func isMusicSearchIntent(_ lowercased: String) -> Bool {
-        let musicWords = [
-            "spotify", "apple music", "play", "çal", "oynat", "aç",
-            "şarkı", "parça", "playlist", "çalma listesi", "radyo", "radyosu",
-            "radio", "album", "albüm", "top 50", "top fifty", "motive",
-            "lvbel", "label c5", "level c5"
-        ]
-
-        guard musicWords.contains(where: { lowercased.contains($0) }) else {
-            return false
-        }
-
-        let nonMusicOpenTargets = ["safari", "chrome", "github", "youtube", "xcode", "cursor", "mail"]
-        if lowercased.contains("aç") || lowercased.contains("open") {
-            return !nonMusicOpenTargets.contains(where: { lowercased.contains($0) })
-        }
-
-        return true
-    }
-
     private func shouldBypassCommandCache(for transcript: String) -> Bool {
         let lowercased = transcript.lowercased(with: Locale(identifier: "tr_TR"))
-        return isMusicSearchIntent(lowercased)
+        return CommandParser.isMusicSearchIntent(lowercased)
             || isScreenAwarenessIntent(lowercased)
             || containsDynamicAnswerIntent(lowercased)
     }
@@ -939,7 +570,8 @@ final class AICommandManager {
             "what is on my screen", "what's on my screen", "look at this",
             "ekran", "ekranım", "ekranim", "ekrandaki", "ekranda",
             "buradaki", "burda", "burada", "bunu", "şunu", "sunu",
-            "gördüğüm", "gordugum", "ne var", "ne görüyorsun", "ne goruyorsun"
+            "gördüğüm", "gordugum", "ne var", "ne görüyorsun", "ne goruyorsun",
+            "how do i open", "nasıl açarım", "nasil acarim", "nerede", "where is"
         ]
 
         return screenWords.contains { lowercased.contains($0) }
@@ -1032,60 +664,6 @@ final class AICommandManager {
                 return part.prefix(1).uppercased() + part.dropFirst()
             }
             .joined(separator: " ")
-    }
-
-    private func normalizedURLString(from rawValue: String) -> String? {
-        let token = rawValue
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-
-        guard !token.isEmpty else { return nil }
-
-        let aliases: [String: String] = [
-            "youtube": "https://youtube.com",
-            "you tube": "https://youtube.com",
-            "github": "https://github.com",
-            "git hub": "https://github.com",
-            "google": "https://google.com",
-            "gmail": "https://mail.google.com",
-            "chatgpt": "https://chatgpt.com",
-            "chat gpt": "https://chatgpt.com",
-            "x": "https://x.com",
-            "twitter": "https://x.com",
-            "reddit": "https://reddit.com"
-        ]
-
-        if let alias = aliases[token] {
-            return alias
-        }
-
-        if token.hasPrefix("http://") || token.hasPrefix("https://") {
-            return token
-        }
-
-        if token.contains(".") && !token.contains(" ") {
-            return "https://\(token)"
-        }
-
-        return nil
-    }
-
-    private func openURLs(_ urls: [String], inBrowser browserName: String) {
-        let escapedBrowser = browserName.replacingOccurrences(of: "\"", with: "\\\"")
-        let lines = urls.map { urlString in
-            let escapedURL = urlString.replacingOccurrences(of: "\"", with: "\\\"")
-            return "open location \"\(escapedURL)\""
-        }.joined(separator: "\n    ")
-
-        let source = """
-        tell application "\(escapedBrowser)"
-            activate
-            \(lines)
-        end tell
-        """
-
-        var error: NSDictionary?
-        NSAppleScript(source: source)?.executeAndReturnError(&error)
     }
 
     private func truncate(_ text: String, to length: Int) -> String {

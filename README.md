@@ -16,45 +16,20 @@ NotchAgent is a local-first macOS notch companion that turns the top-center scre
 
 The project is an evolving SwiftUI application. It currently features a dynamic notch window shell, multiple widget surfaces (Settings, Calendar, Camera Mirror, Music), and a fully functional AI Command Pipeline with voice recognition (Push-to-Talk) backed by local Ollama models or OpenAI.
 
-## What's New in v1.2.1
+## Latest Release
 
-- **Screen Awareness Hotfix:** Replaced the legacy screenshot command path with native ScreenCaptureKit capture so macOS Screen Recording permission is checked against NotchAgent directly.
-- **Faster Vision Flow:** Screen-related commands now skip the initial planning round and go straight to screenshot analysis.
-- **Visual Memory:** Teaching prompts such as "this is me" / "bu benim" can save durable visual context for future screen-aware answers.
-- **Safer Command Cache:** Dynamic answers, screen analysis, music requests, and explanatory prompts no longer get cached as stale repeated responses.
+**v1.2.2** focuses on making the assistant more modular, more context-aware, and easier to guide visually. It adds the split command parser/executor pipeline, vector memory retrieval, background research, Ghost Cursor screen guidance, and a more direct Siri/AppIntents listening trigger.
 
-## What's New in v1.2.0
+Read the full release notes in [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).
 
-- **Multi-step AI Command Execution:** The AI can now plan and execute multiple tasks in sequence (e.g., "Open Safari and type 'macOS tips'"). Includes fault tolerance that safely halts execution if a step fails.
-- **Agent Eyes Animation:** A dynamic visual indicator mimicking "eyes" looking around during processing, bringing the Notch to life.
-- **SwiftData Long-Term Memory:** 
-  - **Facts Memory:** Automatically extracts personal preferences or facts from your voice commands and injects them into future prompts.
-  - **Command Cache:** Remembers past executed commands and returns them instantly via a highly optimized local database.
-- **Siri & AppIntents Integration:** You can now trigger the assistant globally by saying **"Hey Siri, Talk to Notch"** or **"Trigger Notch"** to bypass manual clicks.
-- **Vision Capabilities:** Experimental screen capturing context for LLM processing.
-- **Interactive Speech Feedback:** Enhanced voice feedback logic with sentence-by-sentence queueing and instant interruption when user starts speaking again.
-- **Advanced Applescript Sandbox Evasion:** Natively types text, opens multi-tab browser URLs, and launches apps without relying on fragile AppleScript targets.
+## Documentation
 
-## Current Features
+We have moved our detailed feature lists and usage guides to the `docs` folder. Please check them out to learn how to use NotchAgent to its fullest potential:
 
-- Top-center notch panel with compact and expanded states
-- Menu bar app with settings access
-- Local settings stored with `UserDefaults`
-- SwiftData-powered personal agent memory
-- Global shortcut toggle for notch visibility
-- Music surface with native Spotify and Apple Music playback controls
-- Camera mirror surface with `AVCaptureSession`
-- Calendar surface using EventKit permissions
-- Weather surface placeholder
-- **Voice-first AI Command Pipeline:**
-  - Push-to-talk speech recognition
-  - AppIntents/Siri Trigger Support
-  - Optional whisper.cpp transcription for mixed Turkish/English commands
-  - Local AI model processing via Ollama (`qwen2.5` or others)
-  - OpenAI provider support
-  - Fast SwiftData caching system for instant execution of previously learned commands
-  - Natural language parsing to natively open apps and URLs (e.g., "open github.com")
-  - Smart default music app tracking, Spotify/Apple Music search, and multi-turn conversational confirmation for ambiguous commands
+- 📖 **[AI Agent Usage Guide & Example Prompts](docs/AGENT_USAGE.md)**
+  Learn how to talk to the agent, use screen awareness (vision), teach it facts (memory), and control your system.
+- ⚙️ **[Application Features & Surfaces](docs/APP_FEATURES.md)**
+  Learn about the Music, Calendar, Camera Mirror surfaces, Settings, and how to trigger the app via global shortcuts or Siri.
 
 ## Planned
 
@@ -111,6 +86,8 @@ scripts/build_release.sh
 ```
 
 The generated installer image is written to `dist/NotchAgent.dmg`.
+
+For versioned local release artifacts, use `dist/v1.2.2/NotchAgent-v1.2.2.dmg`.
 
 Tagged releases are built by GitHub Actions when a tag like `v1.0.0` is pushed. Public releases should be signed and notarized with an Apple Developer ID before broad distribution.
 

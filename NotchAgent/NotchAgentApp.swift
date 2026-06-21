@@ -20,6 +20,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleGetURLEvent(event:withReplyEvent:)), forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+        
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("NotchAgentStartListening"), object: nil, queue: .main) { [weak self] _ in
+            if let coordinator = self?.coordinator {
+                coordinator.activateAgentListening()
+            } else {
+                self?.pendingListenRequest = true
+            }
+        }
     }
 
     @objc func handleGetURLEvent(event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
